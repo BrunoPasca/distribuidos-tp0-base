@@ -1,6 +1,6 @@
 #!/bin/bash
 
-a=0
+a=1
 
 cat <<EOF > "$1"
 name: tp0
