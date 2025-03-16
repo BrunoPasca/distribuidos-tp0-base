@@ -1,8 +1,22 @@
 #!/bin/bash
+# Usage: ./generar-compose.sh <filename> <num_clients>
+# Description: Generates a docker-compose file with a server and num_clients clients
 
-a=1
+client_id=1
+num_clients=$2
+filename=$1
 
-cat <<EOF > "$1"
+if ["$#" -ne 2]; then
+	echo "Usage: $0 <filename> <num_clients>"
+	exit 1
+fi
+
+if ! [["$num_clients" =~ ^[0-9]+$]]; then
+	echo "Error: num_clients must be a number"
+	exit 1
+fi
+
+cat <<EOF > "$filename"
 name: tp0
 services:
   server:
@@ -17,14 +31,14 @@ services:
 
 EOF
 
-until [ "$a" -gt "$2" ]; do
-    cat <<EOF >> "$1"
-  client$a:
-    container_name: client$a
+until [ "$client_id" -gt "$num_clients" ]; do
+    cat <<EOF >> "$filename"
+  client$client_id:
+    container_name: client$client_id
     image: client:latest
     entrypoint: /client
     environment:
-      - CLI_ID=$a
+      - CLI_ID=$client_id
       - CLI_LOG_LEVEL=DEBUG
     networks:
       - testing_net
@@ -32,10 +46,10 @@ until [ "$a" -gt "$2" ]; do
       - server
 
 EOF
-    a=$((a + 1))
+    client_id=$((client_id + 1))
 done
 
-cat <<EOF >> "$1"
+cat <<EOF >> "$filename"
 networks:
   testing_net:
     ipam:
