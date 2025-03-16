@@ -25,7 +25,6 @@ services:
     entrypoint: python3 /main.py
     environment:
       - PYTHONUNBUFFERED=1
-      - LOGGING_LEVEL=DEBUG
     volumes:
       - ./server/config.ini:/config.ini
     networks:
@@ -41,7 +40,6 @@ until [ "$client_id" -gt "$num_clients" ]; do
     entrypoint: /client
     environment:
       - CLI_ID=$client_id
-      - CLI_LOG_LEVEL=DEBUG
     volumes:
       - ./client/config.yaml:/config.yaml
     networks:
