@@ -52,6 +52,15 @@ EOF
 done
 
 cat <<EOF >> "$filename"
+netcat:
+    container_name: netcat
+    image: alpine:latest
+    entrypoint: sh -c "apk add --no-cache netcat-openbsd && sleep infinity"
+    networks:
+      - testing_net
+    depends_on:
+      - server
+
 networks:
   testing_net:
     ipam:
