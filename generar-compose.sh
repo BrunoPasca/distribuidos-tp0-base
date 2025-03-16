@@ -19,17 +19,17 @@ EOF
 
 until [ "$a" -gt "$2" ]; do
     cat <<EOF >> "$1"
-client$a:
-  container_name: client$a
-  image: client:latest
-  entrypoint: /client
-  environment:
-    - CLI_ID=$a
-    - CLI_LOG_LEVEL=DEBUG
-  networks:
-    - testing_net
-  depends_on:
-    - server
+  client$a:
+    container_name: client$a
+    image: client:latest
+    entrypoint: /client
+    environment:
+      - CLI_ID=$a
+      - CLI_LOG_LEVEL=DEBUG
+    networks:
+      - testing_net
+    depends_on:
+      - server
 
 EOF
     a=$((a + 1))
