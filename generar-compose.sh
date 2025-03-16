@@ -6,14 +6,14 @@ client_id=1
 num_clients=$2
 filename=$1
 
-if ["$#" -ne 2]; then
-	echo "Usage: $0 <filename> <num_clients>"
-	exit 1
+if [ "$#" -ne 2 ]; then
+    echo "Usage: $0 <filename> <num_clients>"
+    exit 1
 fi
 
-if ! [["$num_clients" =~ ^[0-9]+$]]; then
-	echo "Error: num_clients must be a number"
-	exit 1
+if ! [[ "$num_clients" =~ ^[0-9]+$ ]]; then
+    echo "Error: num_clients must be a number"
+    exit 1
 fi
 
 cat <<EOF > "$filename"
