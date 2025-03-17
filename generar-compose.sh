@@ -30,14 +30,6 @@ services:
     networks:
       - testing_net
 
-  netcat:
-    container_name: netcat
-    image: alpine:latest
-    entrypoint: sh -c "apk add --no-cache netcat-openbsd && sleep infinity"
-    networks:
-      - testing_net
-    depends_on:
-      - server
 EOF
 
 until [ "$client_id" -gt "$num_clients" ]; do

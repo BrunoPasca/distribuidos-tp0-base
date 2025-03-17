@@ -7,7 +7,7 @@ NETCAT_CONTAINER="netcat"
 SERVER_PORT="12345"
 TIMEOUT=5
 
-result=$(docker exec ${NETCAT_CONTAINER} sh -c "echo '${TEST_MESSAGE}' | nc -w ${TIMEOUT} ${SERVER_CONTAINER} ${SERVER_PORT}")
+result=$(docker run --network tp0_testing_net --rm alpine:latest sh -c "echo '${TEST_MESSAGE}' | nc -w ${TIMEOUT} ${SERVER_CONTAINER} ${SERVER_PORT}" )
 
 if [ "$result" = "$TEST_MESSAGE" ]; then
     echo "action: test_echo_server | result: success"
