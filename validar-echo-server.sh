@@ -3,7 +3,6 @@
 # Define variables
 TEST_MESSAGE="Hello Echo Server"
 SERVER_CONTAINER="server"
-NETCAT_CONTAINER="netcat"
 SERVER_PORT="12345"
 TIMEOUT=5
 
