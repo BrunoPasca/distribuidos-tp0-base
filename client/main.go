@@ -126,7 +126,6 @@ func main() {
 
 	client := common.NewClient(clientConfig)
 
-	// Register SIGTERM handler
 	handleSigterm(client)
 
 	client.StartClientLoop()
