@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/op/go-logging"
@@ -90,6 +92,18 @@ func PrintConfig(v *viper.Viper) {
 	)
 }
 
+func handleSigterm(client *common.Client) {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM)
+	go func() {
+		<-c
+		log.Info("action: shutdown | result: in_progress")
+		client.Shutdown()
+		log.Info("action: shutdown | result: success")
+		os.Exit(0)
+	}()
+}
+
 func main() {
 	v, err := InitConfig()
 	if err != nil {
@@ -111,5 +125,9 @@ func main() {
 	}
 
 	client := common.NewClient(clientConfig)
+
+	// Register SIGTERM handler
+	handleSigterm(client)
+
 	client.StartClientLoop()
 }
