@@ -7,7 +7,7 @@ import time
 STORAGE_FILEPATH = "./bets.csv"
 """ Simulated winner number in the lottery contest. """
 LOTTERY_WINNER_NUMBER = 7574
-
+DELIMITER = '|'
 
 """ A lottery bet registry. """
 class Bet:
@@ -49,3 +49,43 @@ def load_bets() -> list[Bet]:
         for row in reader:
             yield Bet(row[0], row[1], row[2], row[3], row[4], row[5])
 
+""""
+Validates the input of a message is considered valid.
+"""
+def is_valid_message(message: str) -> bool:
+    """
+    A valid message must have the following format:
+    agency|name|last_name|document|birthdate|number|
+    where:
+    - name, last_name: only alphabetical characters
+    - document: 8 digits
+    - birthdate: 'YYYY-MM-DD'
+    - number: a positive integer
+
+    Returns a tuple with the fields of the message and a status code:
+    - 0: valid message
+    - 1: invalid
+    """
+    fields = message.split(DELIMITER)
+    if len(fields) != 6:
+        return ([], 1)
+    agency, name, last_name, document, birthdate, number = fields
+    if not agency.isdigit() or int(agency) < 0:
+        return ([], 1)
+    if not name.isalpha() or not last_name.isalpha():
+        return ([], 1)
+    if not document.isdigit() or len(document) != 8:
+        return ([], 1)
+    if not _validate_date(birthdate):
+        return ([], 1)
+    if not number.isdigit() or int(number) < 0:
+        return ([], 1)
+    return (fields, 0)
+    
+
+def _validate_date(date: str) -> bool:
+    try:
+        datetime.datetime.strptime(date, '%Y-%m-%d')
+        return True
+    except ValueError:
+        return False
