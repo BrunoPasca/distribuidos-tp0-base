@@ -42,7 +42,7 @@ class Server:
             fields, response_error_code = self.process_message(msg, client_sock.getpeername()[0])
             self.handle_response(fields, response_error_code, client_sock, msg_type)
         except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
+            logging.error(f"action: receive_message | result: fail | error: {e}")
         finally:
             client_sock.close()
 
