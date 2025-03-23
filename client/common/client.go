@@ -94,3 +94,106 @@ func (c *Client) Shutdown() {
 		log.Info("action: close_client_socket | result: success")
 	}
 }
+
+func (c *Client, length int) SafeRead (data []byte, err error) {
+	conn := c.conn
+	data := make([]byte, length)
+	totalRead := 0
+
+	for totalRead < length {
+		n, err := conn.Read(data[totalRead:])
+		if err != nil {
+			if err == io.EOF {
+				return nil, io.ErrUnexpectedEOF // This means the connection was closed and a short-read occurred
+			}
+			return nil, err
+		}
+		totalRead += n
+	}
+
+	return data, nil
+}
+
+func (c *Client, data [byte]) SafeWrite(){
+	totalSent := 0
+	for totalSent < len(data) {
+		n, err := conn.Write(data[totalSent:])
+		if err != nil {
+			return err // This means the connection was closed and a short-write occurred
+		}
+		totalSent += n
+	}
+
+	return nil
+}
+
+func () GenerateMessage () {
+	// This function generates a message to be sent to the server
+	// 4 bytes for the message length
+	// 1 byte for the message type
+	// 1 byte for the payload
+
+	// The payload is formed: {clientId}|{name}|{lastName}|{document}|{birthdate (yyyy-MM-DD)}|{number}
+	// The message type is a binary 0 for a bet
+	// All of the attributes in the payload come from envVariables
+
+	clientId := os.Getenv("CLI_ID")
+	name := os.Getenv("NAME")
+	lastName := os.Getenv("LAST_NAME")
+	document := os.Getenv("DOCUMENT")
+	birthdate := os.Getenv("BIRTHDATE")
+	number := os.Getenv("NUMBER")
+
+	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%s", clientId, name, lastName, document, birthdate, number)
+	payloadLength := len(payload)
+	messageLength := payloadLength + 5
+
+	message := make([]byte, messageLength)
+	binary.BigEndian.PutUint32(message[0:4], uint32(messageLength))
+	message[4] = 0 // We put 0 for now because we are only sending bets
+	copy(message[5:], []byte(payload))
+}
+
+func (c *Client) SendBet() {
+	// This function sends a bet to the server
+	// The bet is formed by the GenerateMessage function
+	// The message is sent to the server
+
+	message := GenerateMessage()
+	SafeWrite(message)
+}
+
+func (c *Client) ReceiveBetResponse() {
+	// This function receives a response for the bet sent to the server
+	// The response can be ACK or Error
+	// The Response has the format:
+	// {type}|{document}|{betAmount}
+	// Where type can be 0 for ACK and 1 for Error
+
+	response, err := SafeRead(3)
+	if err != nil {
+		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
+	responseType := response[0]
+	document := response[1]
+	betAmount := response[2]
+
+	if responseType == 0 {
+		log.Infof("action: receive_response | result: success | client_id: %v | response: ACK | document: %v | bet_amount: %v",
+			c.config.ID,
+			document,
+			betAmount,
+		)
+	} else {
+		log.Infof("action: receive_response | result: success | client_id: %v | response: Error | document: %v | bet_amount: %v",
+			c.config.ID,
+			document,
+			betAmount,
+		)
+	}
+}

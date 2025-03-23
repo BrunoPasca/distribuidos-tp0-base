@@ -38,11 +38,9 @@ class Server:
         """
         try:
             # TODO: Modify the receive to avoid short-reads
-            msg = self.__read_from_socket(client_sock)
-            self.process_message(msg, client_sock.getpeername()[0])
-            
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
+            msg, msg_type = self.__read_from_socket(client_sock)
+            fields, response_error_code = self.process_message(msg, client_sock.getpeername()[0])
+            self.handle_response(fields, response_error_code, client_sock, msg_type)
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
@@ -104,12 +102,12 @@ class Server:
         fields, status = is_valid_message(message)
         if status == 1:
             logging.error(f"action: receive_message | result: fail | error: invalid message | ip: {sender}")
-            return 1
+            return ((), 1)
         logging.info(f'action: receive_message | result: success | ip: {sender} | msg: {message}')
         store_bets([Bet(*fields)])
         agency, name, last_name, document, birthdate, number = fields # Some fields might be useful in the future
         logging.info(f"action: apuesta_almacenada | result: success | dni: ${document} | numero: ${number}")
-        return 0
+        return (fields, 0)
     
     def safe_read(self, sock, length):
         data = b''
@@ -129,3 +127,37 @@ class Server:
             total_sent += sent
         return True
     
+    def handle_response(self, fields, response_error_code, sock, msg_type):
+        """
+        This functions determines which functions processes the response
+        depending on the message type
+        """
+        if msg_type == 0:
+            self.handle_bet_response(fields, response_error_code, sock)
+        else:
+            pass # For now we should only be getting bets
+
+    def handle_bet_response(self, fields, response_error_code, sock):
+        """
+        This function sends a response to the client depending on the
+        whether the bet was received correctly or not.
+
+        If the bet was received correctly, the response will be:
+        2 bytes: length of the response
+        Then the payload will be: 0|<document>|<number>
+        If the bet was not received correctly, the response will be:
+        2 bytes: length of the response
+        Then the payload will be: 1|<document>|<number>
+        """
+        if response == 0:
+            response = "0|"
+        else:
+            response = "1|"
+        response += f"{fields[3]}|{fields[5]}"
+        response = response.encode('utf-8')
+        response_length = len(response).to_bytes(2, byteorder='big')
+        response = response_length + response
+        self.safe_send(sock, response)
+        addr = sock.getpeername()
+        logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
+        
