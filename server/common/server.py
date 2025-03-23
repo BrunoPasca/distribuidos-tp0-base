@@ -1,6 +1,6 @@
 import socket
 import logging
-from utils import is_valid_message, Bet, store_bets
+from common.utils import is_valid_message, Bet, store_bets
 
 MSG_LENGTH = 1024
 
@@ -74,20 +74,21 @@ class Server:
         """
         header = self.safe_read(sock, 5)
         if not header:
+            logging.error('action: receive_message | result: fail | error: short-read')
             return ("", -1)
-            
         msg_length = int.from_bytes(header[:4], byteorder='big')
         msg_type = header[4]
-        
+
         payload_length = msg_length - 5
         if payload_length > 0:
             payload = self.safe_read(sock, payload_length)
             if not payload:
+                logging.error('action: receive_message | result: fail | error: short-read')
                 return ("", -1)
             payload_str = payload.decode('utf-8').strip()
         else:
             payload_str = ""
-            
+
         addr = sock.getpeername()
         logging.info(f'action: receive_message | result: success | ip: {addr[0]} | type: {msg_type} | payload: {payload_str}')
         
@@ -106,7 +107,7 @@ class Server:
         logging.info(f'action: receive_message | result: success | ip: {sender} | msg: {message}')
         store_bets([Bet(*fields)])
         agency, name, last_name, document, birthdate, number = fields # Some fields might be useful in the future
-        logging.info(f"action: apuesta_almacenada | result: success | dni: ${document} | numero: ${number}")
+        logging.info(f"action: apuesta_almacenada | result: success | dni: {document} | numero: {number}")
         return (fields, 0)
     
     def safe_read(self, sock, length):
@@ -149,11 +150,12 @@ class Server:
         2 bytes: length of the response
         Then the payload will be: 1|<document>|<number>
         """
-        if response == 0:
-            response = "0|"
+
+        if response_error_code == 0:
+            response = f"0|{fields[3]}|{fields[5]}"
         else:
-            response = "1|"
-        response += f"{fields[3]}|{fields[5]}"
+            response = "1"
+        
         response = response.encode('utf-8')
         response_length = len(response).to_bytes(2, byteorder='big')
         response = response_length + response

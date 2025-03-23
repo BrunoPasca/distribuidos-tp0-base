@@ -72,7 +72,7 @@ def is_valid_message(message: str) -> bool:
     agency, name, last_name, document, birthdate, number = fields
     if not agency.isdigit() or int(agency) < 0:
         return ([], 1)
-    if not name.isalpha() or not last_name.isalpha():
+    if not _validate_name(name) or not _validate_name(last_name):
         return ([], 1)
     if not document.isdigit() or len(document) != 8:
         return ([], 1)
@@ -82,6 +82,11 @@ def is_valid_message(message: str) -> bool:
         return ([], 1)
     return (fields, 0)
     
+def _validate_name(name: str) -> bool:
+    for char in name:
+        if not char.isalpha() and not char.isspace():
+            return False
+    return True
 
 def _validate_date(date: str) -> bool:
     try:

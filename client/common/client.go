@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"os"
+	"encoding/binary"
 
 	"github.com/op/go-logging"
 )
@@ -95,17 +97,13 @@ func (c *Client) Shutdown() {
 	}
 }
 
-func (c *Client, length int) SafeRead (data []byte, err error) {
-	conn := c.conn
+func (c *Client) SafeRead(length int) ([]byte, error) {
 	data := make([]byte, length)
 	totalRead := 0
 
 	for totalRead < length {
-		n, err := conn.Read(data[totalRead:])
+		n, err := c.conn.Read(data[totalRead:])
 		if err != nil {
-			if err == io.EOF {
-				return nil, io.ErrUnexpectedEOF // This means the connection was closed and a short-read occurred
-			}
 			return nil, err
 		}
 		totalRead += n
@@ -114,10 +112,10 @@ func (c *Client, length int) SafeRead (data []byte, err error) {
 	return data, nil
 }
 
-func (c *Client, data [byte]) SafeWrite(){
+func (c *Client) SafeWrite(data []byte) error {
 	totalSent := 0
 	for totalSent < len(data) {
-		n, err := conn.Write(data[totalSent:])
+		n, err := c.conn.Write(data[totalSent:])
 		if err != nil {
 			return err // This means the connection was closed and a short-write occurred
 		}
@@ -127,15 +125,11 @@ func (c *Client, data [byte]) SafeWrite(){
 	return nil
 }
 
-func () GenerateMessage () {
+func GenerateMessage() []byte {
 	// This function generates a message to be sent to the server
 	// 4 bytes for the message length
 	// 1 byte for the message type
 	// 1 byte for the payload
-
-	// The payload is formed: {clientId}|{name}|{lastName}|{document}|{birthdate (yyyy-MM-DD)}|{number}
-	// The message type is a binary 0 for a bet
-	// All of the attributes in the payload come from envVariables
 
 	clientId := os.Getenv("CLI_ID")
 	name := os.Getenv("NAME")
@@ -146,21 +140,24 @@ func () GenerateMessage () {
 
 	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%s", clientId, name, lastName, document, birthdate, number)
 	payloadLength := len(payload)
-	messageLength := payloadLength + 5
+	messageLength := payloadLength + 5 // 4 bytes for length + 1 byte for type
 
 	message := make([]byte, messageLength)
-	binary.BigEndian.PutUint32(message[0:4], uint32(messageLength))
-	message[4] = 0 // We put 0 for now because we are only sending bets
-	copy(message[5:], []byte(payload))
+	binary.BigEndian.PutUint32(message[:4], uint32(messageLength))
+
+	// Set message type (0 for bets)
+	message[4] = 0
+	copy(message[5:], payload)
+	return message
 }
 
 func (c *Client) SendBet() {
 	// This function sends a bet to the server
 	// The bet is formed by the GenerateMessage function
 	// The message is sent to the server
-
+	c.createClientSocket()
 	message := GenerateMessage()
-	SafeWrite(message)
+	c.SafeWrite(message)
 }
 
 func (c *Client) ReceiveBetResponse() {
@@ -170,7 +167,7 @@ func (c *Client) ReceiveBetResponse() {
 	// {type}|{document}|{betAmount}
 	// Where type can be 0 for ACK and 1 for Error
 
-	response, err := SafeRead(3)
+	response, err := c.SafeRead(3)
 	if err != nil {
 		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
 			c.config.ID,

@@ -128,5 +128,7 @@ func main() {
 
 	handleSigterm(client)
 
-	client.StartClientLoop()
+	//client.StartClientLoop()
+
+	client.SendBet()
 }
