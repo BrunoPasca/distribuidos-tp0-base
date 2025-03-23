@@ -166,14 +166,29 @@ func (c *Client) SendBet() {
 	c.SafeWrite(message)
 }
 
+func (c *Client) ProcessResponse(response []byte) (int, string, string) {
+	// This function processes the response received from the server
+	// The response has the format:
+	// The rest has the format "responseType|document|betAmount"
+	// responseType is 0 if the bet was sent correctly or 1 if there was an error
+
+	// decode the response from bytes to string
+
+	decoded_response := string(response)
+
+	responseType := int(decoded_response[0] - '0') // We need to do this because the response is a byte, and we want a 0 or 1.
+	document := decoded_response[2:10]
+	betAmount := decoded_response[11:]
+
+	return responseType, document, betAmount
+}
+
 func (c *Client) ReceiveBetResponse() {
 	// This function receives a response for the bet sent to the server
-	// The response can be ACK or Error
-	// The Response has the format:
-	// {type}|{document}|{betAmount}
-	// Where type can be 0 for ACK and 1 for Error
+	// And validates if the bet was sent correctly.
+	// It logs the result of the operation
 
-	response, err := c.SafeRead(3)
+	response_length, err := c.SafeRead(2)
 	if err != nil {
 		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
 			c.config.ID,
@@ -182,13 +197,19 @@ func (c *Client) ReceiveBetResponse() {
 		return
 	}
 
-	responseType := response[0]
-	document := response[1]
-	betAmount := response[2]
+	response, err := c.SafeRead(int(binary.BigEndian.Uint16(response_length)))
+	if err != nil {
+		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
+	responseType, document, betAmount := c.ProcessResponse(response)
 
 	if responseType == 0 {
-		log.Infof("action: receive_response | result: success | client_id: %v | response: ACK | document: %v | bet_amount: %v",
-			c.config.ID,
+		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
 			document,
 			betAmount,
 		)
@@ -200,3 +221,4 @@ func (c *Client) ReceiveBetResponse() {
 		)
 	}
 }
+
