@@ -122,6 +122,7 @@ func main() {
 		ID:            v.GetString("id"),
 		LoopAmount:    v.GetInt("loop.amount"),
 		LoopPeriod:    v.GetDuration("loop.period"),
+		BatchMaxAmount: v.GetInt("batch.maxAmount"),
 	}
 
 	client := common.NewClient(clientConfig)
@@ -131,4 +132,6 @@ func main() {
 	//client.StartClientLoop()
 
 	client.StartClientBetSending()
+
+	client.Shutdown()
 }

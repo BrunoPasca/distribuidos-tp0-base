@@ -25,6 +25,7 @@ type ClientConfig struct {
 	ServerAddress string
 	LoopAmount    int
 	LoopPeriod    time.Duration
+	BatchMaxAmount int
 }
 
 // Client Entity that encapsulates how
@@ -99,8 +100,16 @@ func (c *Client) StartClientLoop() {
 func (c *Client) StartClientBetSending() {
 	// This function sends a bet to the server and waits for a response
 	c.createClientSocket()
-	c.SendBet()
-	c.ReceiveBetResponse()
+	packet := c.CreateBetsPacket(c.config.BatchMaxAmount)
+	err := c.SafeWrite(packet)
+	if err != nil {
+		log.Errorf("action: send_packet | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+	c.ReceiveMultipleBetResponse(c.config.BatchMaxAmount)
 }
 
 func (c *Client) Shutdown() {
@@ -138,6 +147,12 @@ func (c *Client) SafeWrite(data []byte) error {
 	return nil
 }
 
+func GeneratePayload(clientId, name, lastName, document, birthdate, number string) string {
+	// This function generates a payload for a bet
+	// It takes the fields as parameters and outputs a formatted string
+	return fmt.Sprintf("%s|%s|%s|%s|%s|%s", clientId, name, lastName, document, birthdate, number)
+}
+
 func GenerateMessage() []byte {
 	// This function generates a message to be sent to the server
 	// 4 bytes for the message length
@@ -151,7 +166,7 @@ func GenerateMessage() []byte {
 	birthdate := os.Getenv("BIRTHDATE")
 	number := os.Getenv("NUMBER")
 
-	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%s", clientId, name, lastName, document, birthdate, number)
+	payload := GeneratePayload(clientId, name, lastName, document, birthdate, number)
 	payloadLength := len(payload)
 	messageLength := payloadLength + HeaderLength // 4 bytes for length + 1 byte for type
 
@@ -228,3 +243,46 @@ func (c *Client) ReceiveBetResponse() {
 	}
 }
 
+func (c *Client) CreateBetsPacket(amount int) []byte {
+	// This function creates a packet with a certain amount of bets
+	// The packet format is as follows:
+	// 4 bytes for the packet length
+	// 1 byte for the packet type
+	// The rest is the payload
+	// The payload is formed by bets separated by a delimiter "\n"
+
+	// This will change to be from a datafile
+	clientId := os.Getenv("CLI_ID")
+	name := os.Getenv("NAME")
+	lastName := os.Getenv("LAST_NAME")
+	document := os.Getenv("DOCUMENT")
+	birthdate := os.Getenv("BIRTHDATE")
+	number := os.Getenv("NUMBER")
+
+	var payload string
+	for i := 0; i < amount; i++ {
+		betPayload := GeneratePayload(clientId, name, lastName, document, birthdate, number)
+		payload += betPayload + "\n"
+	}
+	
+	payloadLength := len(payload)
+
+	header := make([]byte, HeaderLength)
+	binary.BigEndian.PutUint32(header[:MessageTypePos], uint32(payloadLength+HeaderLength))
+	header[MessageTypePos] = MessageTypeBet
+
+	packet := append(header, []byte(payload)...)
+	return packet
+}
+
+func (c *Client) ReceiveMultipleBetResponse(betAmount int) {
+	// This function receives a response for multiple bets sent to the server
+	// this response can either be a success or an error
+	// It logs the result of the operation
+	// The success response occurs when all the bets were sent correctly
+	// The error response occurs when at least one bet was not sent correctly
+
+	log.Infof("action: apuesta_recibida | result: success | cantidad: %v",
+		betAmount,
+	)
+}
