@@ -158,5 +158,5 @@ class Server:
         response = response_length + response
         self.safe_send(sock, response)
         addr = sock.getpeername()
-        logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
+        #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
         
