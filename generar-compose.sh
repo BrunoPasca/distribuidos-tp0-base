@@ -40,6 +40,11 @@ until [ "$client_id" -gt "$num_clients" ]; do
     entrypoint: /client
     environment:
       - CLI_ID=$client_id
+      - NAME=Santiago Lionel
+      - LAST_NAME=Lorca
+      - DOCUMENT=30904465
+      - BIRTHDATE=1999-03-17
+      - NUMBER=7574
     volumes:
       - ./client/config.yaml:/config.yaml
     networks:
