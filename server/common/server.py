@@ -89,9 +89,7 @@ class Server:
         else:
             payload_str = ""
 
-        addr = sock.getpeername()
-        logging.info(f'action: receive_message | result: success | ip: {addr[0]} | type: {msg_type} | payload: {payload_str}')
-        
+        addr = sock.getpeername()        
         return (payload_str, msg_type)
 
     def process_message(self, message, sender):
@@ -104,7 +102,6 @@ class Server:
         if status == 1:
             logging.error(f"action: receive_message | result: fail | error: invalid message | ip: {sender}")
             return ((), 1)
-        logging.info(f'action: receive_message | result: success | ip: {sender} | msg: {message}')
         store_bets([Bet(*fields)])
         agency, name, last_name, document, birthdate, number = fields # Some fields might be useful in the future
         logging.info(f"action: apuesta_almacenada | result: success | dni: {document} | numero: {number}")
