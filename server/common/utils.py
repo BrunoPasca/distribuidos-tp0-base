@@ -2,7 +2,13 @@ import csv
 import datetime
 import time
 
-from common.constants import DELIMITER, STORAGE_FILEPATH, LOTTERY_WINNER_NUMBER
+from common.constants import (
+    DELIMITER,
+    STORAGE_FILEPATH,
+    LOTTERY_WINNER_NUMBER,
+    MAX_NAME_LENGTH,
+    MAX_AMOUNT
+    )
 
 """ A lottery bet registry. """
 class Bet:
@@ -73,11 +79,13 @@ def is_valid_message(message: str) -> bool:
         return ([], 1)
     if not _validate_date(birthdate):
         return ([], 1)
-    if not number.isdigit() or int(number) < 0:
+    if not number.isdigit() or int(number) < 0 or int(number) > MAX_AMOUNT:
         return ([], 1)
     return (fields, 0)
     
 def _validate_name(name: str) -> bool:
+    if len(name) == 0 or len(name) > MAX_NAME_LENGTH:
+        return False
     for char in name:
         if not char.isalpha() and not char.isspace():
             return False
