@@ -252,17 +252,22 @@ func (c *Client) CreateBetsPacket(amount int) []byte {
 	// The rest is the payload
 	// The payload is formed by bets separated by a delimiter "\n"
 
-	// This will change to be from a datafile
 	clientId := os.Getenv("CLI_ID")
-	name := os.Getenv("NAME")
-	lastName := os.Getenv("LAST_NAME")
-	document := os.Getenv("DOCUMENT")
-	birthdate := os.Getenv("BIRTHDATE")
-	number := os.Getenv("NUMBER")
 
+	file, err := os.Open("./bets.csv")
+	if err != nil {
+		log.Errorf("action: open_file | result: fail | error: %v", err)
+		return nil
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
 	var payload string
 	for i := 0; i < amount; i++ {
-		betPayload := GeneratePayload(clientId, name, lastName, document, birthdate, number)
+		scanner.Scan()
+		line := scanner.Text()
+		parts := strings.Split(line, ",")
+		betPayload := GeneratePayload(clientId, parts[0], parts[1], parts[2], parts[3], parts[4])
 		payload += betPayload + "\n"
 	}
 	
@@ -287,3 +292,4 @@ func (c *Client) ReceiveMultipleBetResponse(betAmount int) {
 		betAmount,
 	)
 }
+

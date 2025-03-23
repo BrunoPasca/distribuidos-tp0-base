@@ -24,6 +24,7 @@ services:
       - NUMBER=7574
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./bet_files/agency-1.csv:/bets.csv
     networks:
       - testing_net
     depends_on:

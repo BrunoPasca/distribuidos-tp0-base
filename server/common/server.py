@@ -128,7 +128,7 @@ class Server:
         elif msg_type == MSG_TYPE_MULTIPLE_BETS:
             return self.process_message_multiple_bets(message, sender)
         else:
-            return ()
+            return ((), ERROR_CODE_INVALID_MESSAGE)
 
     def process_message_single_bet(self, message, sender):
         """
