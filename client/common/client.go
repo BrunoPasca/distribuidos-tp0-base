@@ -7,10 +7,16 @@ import (
 	"time"
 	"os"
 	"encoding/binary"
+	"strings"
 
 	"github.com/op/go-logging"
 )
 
+const Delimiter = "|"
+const MessageTypeSuccess = 0
+const MessageTypeBet = 0
+const MessageTypePos = 4
+const HeaderLength = 5
 var log = logging.MustGetLogger("log")
 
 // ClientConfig Configuration used by the client
@@ -147,14 +153,14 @@ func GenerateMessage() []byte {
 
 	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%s", clientId, name, lastName, document, birthdate, number)
 	payloadLength := len(payload)
-	messageLength := payloadLength + 5 // 4 bytes for length + 1 byte for type
+	messageLength := payloadLength + HeaderLength // 4 bytes for length + 1 byte for type
 
 	message := make([]byte, messageLength)
-	binary.BigEndian.PutUint32(message[:4], uint32(messageLength))
+	binary.BigEndian.PutUint32(message[:MessageTypePos], uint32(messageLength))
 
 	// Set message type (0 for bets)
-	message[4] = 0
-	copy(message[5:], payload)
+	message[MessageTypePos] = MessageTypeBet
+	copy(message[HeaderLength:], payload)
 	return message
 }
 
@@ -175,10 +181,10 @@ func (c *Client) ProcessResponse(response []byte) (int, string, string) {
 	// decode the response from bytes to string
 
 	decoded_response := string(response)
-
-	responseType := int(decoded_response[0] - '0') // We need to do this because the response is a byte, and we want a 0 or 1.
-	document := decoded_response[2:10]
-	betAmount := decoded_response[11:]
+	parts := strings.Split(decoded_response, Delimiter)
+	responseType := int(parts[0][0] - '0') // We have to subtract a string 0 because a string 0 maps to int 48.
+	document := parts[1]
+	betAmount := parts[2]
 
 	return responseType, document, betAmount
 }
@@ -208,7 +214,7 @@ func (c *Client) ReceiveBetResponse() {
 
 	responseType, document, betAmount := c.ProcessResponse(response)
 
-	if responseType == 0 {
+	if responseType == MessageTypeSuccess {
 		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
 			document,
 			betAmount,
