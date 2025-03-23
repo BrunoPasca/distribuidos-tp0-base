@@ -130,8 +130,8 @@ func main() {
 	handleSigterm(client)
 
 	//client.StartClientLoop()
-
-	client.StartClientBetSending()
+	client.StartBettingLoop()
+	//client.StartClientBetSending()
 
 	client.Shutdown()
 }

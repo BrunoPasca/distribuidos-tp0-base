@@ -98,10 +98,42 @@ func (c *Client) StartClientLoop() {
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }
 
-func (c *Client) StartClientBetSending() {
-	// This function sends a bet to the server and waits for a response
+func (c *Client) StartBettingLoop() {
+	// This functions starts a loop that will end when all bets are sent.
+	// In each iteration it sends c.config.BatchMaxAmount bets to the server
+	// and waits for a response
+
+	file, err := os.Open("./bets.csv")
+	if err != nil {
+		log.Errorf("action: open_file | result: fail | error: %v", err)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	var bets []string
+
 	c.createClientSocket()
-	packet := c.CreateBetsPacket(c.config.BatchMaxAmount)
+	defer c.conn.Close()
+
+	for scanner.Scan() {
+		bets = append(bets, scanner.Text())
+
+		if len(bets) == c.config.BatchMaxAmount {
+			c.SendMultipleBets(bets)
+			bets = nil // Reset the batch
+		}
+	}
+
+	if len(bets) > 0 {
+		c.SendMultipleBets(bets)
+	}
+}
+
+func (c *Client) SendMultipleBets(bets []string) {
+	// This function sends a bet to the server and waits for a response
+	
+	packet := c.CreateBetsPacket(bets)
 	err := c.SafeWrite(packet)
 	if err != nil {
 		log.Errorf("action: send_packet | result: fail | client_id: %v | error: %v",
@@ -244,7 +276,7 @@ func (c *Client) ReceiveBetResponse() {
 	}
 }
 
-func (c *Client) CreateBetsPacket(amount int) []byte {
+func (c *Client) CreateBetsPacket(bets []string) []byte {
 	// This function creates a packet with a certain amount of bets
 	// The packet format is as follows:
 	// 4 bytes for the packet length
@@ -254,23 +286,11 @@ func (c *Client) CreateBetsPacket(amount int) []byte {
 
 	clientId := os.Getenv("CLI_ID")
 
-	file, err := os.Open("./bets.csv")
-	if err != nil {
-		log.Errorf("action: open_file | result: fail | error: %v", err)
-		return nil
+	for i, bet := range bets {
+		bets[i] = fmt.Sprintf("%s|%s", clientId, strings.ReplaceAll(bet, ",", "|"))
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	var payload string
-	for i := 0; i < amount; i++ {
-		scanner.Scan()
-		line := scanner.Text()
-		parts := strings.Split(line, ",")
-		betPayload := GeneratePayload(clientId, parts[0], parts[1], parts[2], parts[3], parts[4])
-		payload += betPayload + "\n"
-	}
-	
+	payload := strings.Join(bets, "\n")
 	payloadLength := len(payload)
 
 	header := make([]byte, HeaderLength)

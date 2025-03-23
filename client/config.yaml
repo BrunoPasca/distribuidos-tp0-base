@@ -1,9 +1,9 @@
 server:
   address: "server:12345"
 loop:
-  amount: 500
-  period: "150ms"
+  amount: 3
+  period: "50ms"
 log:
   level: "INFO"
 batch:
-  maxAmount: 5 # We dont want this number times the maximum package size to exceed 8kb. Technically we can send 80 msgs but we try to keep it safe.
+  maxAmount: 99
