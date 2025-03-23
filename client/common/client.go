@@ -90,6 +90,13 @@ func (c *Client) StartClientLoop() {
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }
 
+func (c *Client) StartClientBetSending() {
+	// This function sends a bet to the server and waits for a response
+	c.createClientSocket()
+	c.SendBet()
+	c.ReceiveBetResponse()
+}
+
 func (c *Client) Shutdown() {
 	if c.conn != nil {
 		c.conn.Close()
@@ -155,7 +162,6 @@ func (c *Client) SendBet() {
 	// This function sends a bet to the server
 	// The bet is formed by the GenerateMessage function
 	// The message is sent to the server
-	c.createClientSocket()
 	message := GenerateMessage()
 	c.SafeWrite(message)
 }

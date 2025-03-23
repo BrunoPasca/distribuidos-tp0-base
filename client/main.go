@@ -130,5 +130,5 @@ func main() {
 
 	//client.StartClientLoop()
 
-	client.SendBet()
+	client.StartClientBetSending()
 }
