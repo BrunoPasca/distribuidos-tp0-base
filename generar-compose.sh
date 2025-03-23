@@ -47,6 +47,7 @@ until [ "$client_id" -gt "$num_clients" ]; do
       - NUMBER=7574
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./bet_files/agency-$client_id.csv:/bets.csv
     networks:
       - testing_net
     depends_on:

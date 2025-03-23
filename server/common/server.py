@@ -6,10 +6,12 @@ from common.constants import (
     ERROR_CODE_INVALID_MESSAGE,
     HEADER_LENGTH,
     MSG_LENGTH,
-    MSG_TYPE_BET,
+    MSG_TYPE_SINGLE_BET,
+    MSG_TYPE_MULTIPLE_BETS,
     DOCUMENT_POS,
     BET_AMOUNT_POS,
     RESPONSE_HEADER_LENGTH
+
 )
 
 class Server:
@@ -44,7 +46,7 @@ class Server:
         """
         try:
             msg, msg_type = self.__read_from_socket(client_sock)
-            fields, response_error_code = self.process_message(msg, client_sock.getpeername()[0])
+            fields, response_error_code = self.process_message(msg, client_sock.getpeername()[0], msg_type)
             self.handle_response(fields, response_error_code, client_sock, msg_type)
         except OSError as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
@@ -96,21 +98,6 @@ class Server:
 
         addr = sock.getpeername()        
         return (payload_str, msg_type)
-
-    def process_message(self, message, sender):
-        """
-        Process message
-
-        Function processes message and returns a response
-        """
-        fields, status = is_valid_message(message)
-        if status == ERROR_CODE_INVALID_MESSAGE:
-            logging.error(f"action: receive_message | result: fail | error: invalid message | ip: {sender}")
-            return ((), ERROR_CODE_INVALID_MESSAGE)
-        store_bets([Bet(*fields)])
-        agency, name, last_name, document, birthdate, number = fields # Some fields might be useful in the future
-        logging.info(f"action: apuesta_almacenada | result: success | dni: {document} | numero: {number}")
-        return (fields, ERROR_CODE_NO_ERRORS)
     
     def safe_read(self, sock, length):
         data = b''
@@ -130,15 +117,67 @@ class Server:
             total_sent += sent
         return True
     
+    def process_message(self, message, sender, msg_type):
+        """
+        Process message
+
+        Function processes message and returns a response
+        """
+        if msg_type == MSG_TYPE_SINGLE_BET:
+            return self.process_message_single_bet(message, sender)
+        elif msg_type == MSG_TYPE_MULTIPLE_BETS:
+            return self.process_message_multiple_bets(message, sender)
+        else:
+            return ()
+
+    def process_message_single_bet(self, message, sender):
+        """
+        This function processes a single bet message and stores it in the bets file
+        """
+        fields, status = is_valid_message(message)
+        if status == ERROR_CODE_INVALID_MESSAGE:
+            logging.error(f"action: receive_message | result: fail | error: invalid message | ip: {sender}")
+            return ((), ERROR_CODE_INVALID_MESSAGE)
+        store_bets([Bet(*fields)])
+        agency, name, last_name, document, birthdate, number = fields # Some fields might be useful in the future
+        logging.info(f"action: apuesta_almacenada | result: success | dni: {document} | numero: {number}")
+        return (fields, ERROR_CODE_NO_ERRORS)
+    
+    def process_message_multiple_bets(self, message, sender):
+        """
+        This function processes multiple bets at a time
+        If all bets are valid, they are stored in the bets file
+        If at least one bet is invalid, no bets are stored
+
+        Bets are delimited by a newline character "\n"
+
+        Inside each bet, fields are separated by a "|"
+        """
+        bets = message.split("\n")
+        bet_amount = len(bets)        
+        valid_bets = []
+        for bet in bets:
+            fields, status = is_valid_message(bet)
+            if status == ERROR_CODE_INVALID_MESSAGE:
+                logging.error(f"action: apuesta_recibida | result: fail | cantidad: {bet_amount}")
+                return ((), ERROR_CODE_INVALID_MESSAGE)
+            valid_bets.append(Bet(*fields))
+        store_bets(valid_bets)
+        logging.info(f"action: apuesta_recibida | result: success | cantidad: {bet_amount}")
+        return (fields, ERROR_CODE_NO_ERRORS)
+
+    
     def handle_response(self, fields, response_error_code, sock, msg_type):
         """
         This functions determines which functions processes the response
         depending on the message type
         """
-        if msg_type == MSG_TYPE_BET:
+        if msg_type == MSG_TYPE_SINGLE_BET:
             self.handle_bet_response(fields, response_error_code, sock)
+        elif msg_type == MSG_TYPE_MULTIPLE_BETS:
+            self.handle_multiple_bets_response(fields, response_error_code, sock)
         else:
-            pass # For now we should only be getting bets
+            pass 
 
     def handle_bet_response(self, fields, response_error_code, sock):
         """
@@ -162,6 +201,24 @@ class Server:
         response_length = len(response).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response
         self.safe_send(sock, response)
-        addr = sock.getpeername()
         #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
-        
+    
+    def handle_multiple_bets_response(self, fields, response_error_code, sock):
+        """
+        This function sends a response to the client depending on the
+        whether the bets were received correctly or not.
+
+        If the bets were received correctly, the response will be:
+        2 bytes: length of the response
+        Then the payload will be: 0|<number_of_bets>
+        If the bets were not received correctly, the response will be:
+        2 bytes: length of the response
+        Then the payload will be: 1|<number_of_bets>
+        """
+
+        response = f"{response_error_code}|" # TODO: Add number of bets
+        response = response.encode('utf-8')
+        response_length = len(response).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
+        response = response_length + response
+        self.safe_send(sock, response)
+        #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
