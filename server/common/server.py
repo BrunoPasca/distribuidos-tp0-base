@@ -1,8 +1,13 @@
 import socket
 import logging
 from common.utils import is_valid_message, Bet, store_bets
-
-MSG_LENGTH = 1024
+from common.constants import (
+    ERROR_CODE_NO_ERRORS, 
+    ERROR_CODE_INVALID_MESSAGE,
+    HEADER_LENGTH,
+    MSG_LENGTH,
+    MSG_TYPE_BET
+)
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -37,7 +42,6 @@ class Server:
         client socket will also be closed
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
             msg, msg_type = self.__read_from_socket(client_sock)
             fields, response_error_code = self.process_message(msg, client_sock.getpeername()[0])
             self.handle_response(fields, response_error_code, client_sock, msg_type)
@@ -72,14 +76,14 @@ class Server:
         Returns a tuple with the payload and the type of message
         If the message is invalid, the payload will be an empty string and the type -1
         """
-        header = self.safe_read(sock, 5)
+        header = self.safe_read(sock, HEADER_LENGTH)
         if not header:
             logging.error('action: receive_message | result: fail | error: short-read')
             return ("", -1)
-        msg_length = int.from_bytes(header[:4], byteorder='big')
+        msg_length = int.from_bytes(header[:MSG_LENGTH], byteorder='big')
         msg_type = header[4]
 
-        payload_length = msg_length - 5
+        payload_length = msg_length - HEADER_LENGTH
         if payload_length > 0:
             payload = self.safe_read(sock, payload_length)
             if not payload:
@@ -99,13 +103,13 @@ class Server:
         Function processes message and returns a response
         """
         fields, status = is_valid_message(message)
-        if status == 1:
+        if status == ERROR_CODE_INVALID_MESSAGE:
             logging.error(f"action: receive_message | result: fail | error: invalid message | ip: {sender}")
-            return ((), 1)
+            return ((), ERROR_CODE_INVALID_MESSAGE)
         store_bets([Bet(*fields)])
         agency, name, last_name, document, birthdate, number = fields # Some fields might be useful in the future
         logging.info(f"action: apuesta_almacenada | result: success | dni: {document} | numero: {number}")
-        return (fields, 0)
+        return (fields, ERROR_CODE_NO_ERRORS)
     
     def safe_read(self, sock, length):
         data = b''
@@ -130,7 +134,7 @@ class Server:
         This functions determines which functions processes the response
         depending on the message type
         """
-        if msg_type == 0:
+        if msg_type == MSG_TYPE_BET:
             self.handle_bet_response(fields, response_error_code, sock)
         else:
             pass # For now we should only be getting bets
@@ -148,10 +152,10 @@ class Server:
         Then the payload will be: 1|<document>|<number>
         """
 
-        if response_error_code == 0:
-            response = f"0|{fields[3]}|{fields[5]}"
+        if response_error_code == ERROR_CODE_NO_ERRORS:
+            response = f"{ERROR_CODE_NO_ERRORS}|{fields[3]}|{fields[5]}"
         else:
-            response = "1"
+            response = f"{ERROR_CODE_INVALID_MESSAGE}"
         
         response = response.encode('utf-8')
         response_length = len(response).to_bytes(2, byteorder='big')

@@ -2,12 +2,7 @@ import csv
 import datetime
 import time
 
-
-""" Bets storage location. """
-STORAGE_FILEPATH = "./bets.csv"
-""" Simulated winner number in the lottery contest. """
-LOTTERY_WINNER_NUMBER = 7574
-DELIMITER = '|'
+from common.constants import DELIMITER, STORAGE_FILEPATH, LOTTERY_WINNER_NUMBER
 
 """ A lottery bet registry. """
 class Bet:
