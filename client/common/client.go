@@ -113,9 +113,6 @@ func (c *Client) StartBettingLoop() {
 	scanner := bufio.NewScanner(file)
 	var bets []string
 
-	c.createClientSocket()
-	defer c.conn.Close()
-
 	for scanner.Scan() {
 		bets = append(bets, scanner.Text())
 
@@ -132,6 +129,9 @@ func (c *Client) StartBettingLoop() {
 
 func (c *Client) SendMultipleBets(bets []string) {
 	// This function sends a bet to the server and waits for a response
+
+	c.createClientSocket()
+	defer c.conn.Close()
 	
 	packet := c.CreateBetsPacket(bets)
 	err := c.SafeWrite(packet)
@@ -142,7 +142,7 @@ func (c *Client) SendMultipleBets(bets []string) {
 		)
 		return
 	}
-	c.ReceiveMultipleBetResponse(c.config.BatchMaxAmount)
+	c.ReceiveMultipleBetResponse()
 }
 
 func (c *Client) Shutdown() {
@@ -220,7 +220,7 @@ func (c *Client) SendBet() {
 	c.SafeWrite(message)
 }
 
-func (c *Client) ProcessResponse(response []byte) (int, string, string) {
+func (c *Client) ProcessResponseSingleBet(response []byte) (int, string, string) {
 	// This function processes the response received from the server
 	// The response has the format:
 	// The rest has the format "responseType|document|betAmount"
@@ -235,6 +235,21 @@ func (c *Client) ProcessResponse(response []byte) (int, string, string) {
 	betAmount := parts[2]
 
 	return responseType, document, betAmount
+}
+
+func (c *Client) ProcessResponseMultipleBet(response []byte) (int, int) {
+	// This function processes the response received from the server
+	// The response has the format:
+	// The rest has the format "responseType|numberOfBets"
+	// responseType is 0 if the bet was sent correctly or 1 if there was an error
+
+	// decode the response from bytes to string
+	decoded_response := string(response)
+	parts := strings.Split(decoded_response, Delimiter)
+	responseType := int(parts[0][0] - '0') // We have to subtract a string 0 because a string 0 maps to int 48.
+	numberOfBets := int(parts[1][0] - '0') // We have to subtract a string 0 because a string 0 maps to int 48.
+
+	return responseType, numberOfBets
 }
 
 func (c *Client) ReceiveBetResponse() {
@@ -260,7 +275,7 @@ func (c *Client) ReceiveBetResponse() {
 		return
 	}
 
-	responseType, document, betAmount := c.ProcessResponse(response)
+	responseType, document, betAmount := c.ProcessResponseSingleBet(response)
 
 	if responseType == MessageTypeSuccess {
 		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
@@ -301,15 +316,47 @@ func (c *Client) CreateBetsPacket(bets []string) []byte {
 	return packet
 }
 
-func (c *Client) ReceiveMultipleBetResponse(betAmount int) {
+func (c *Client) ReceiveMultipleBetResponse() {
 	// This function receives a response for multiple bets sent to the server
 	// this response can either be a success or an error
 	// It logs the result of the operation
 	// The success response occurs when all the bets were sent correctly
 	// The error response occurs when at least one bet was not sent correctly
+	// The response has the format:
+	// 2 bytes for the response length
+	// then the payload with the format "responseType|numberOfBets"
+	// responseType is 0 if the bets were sent correctly or 1 if there was an error
 
-	log.Infof("action: apuesta_recibida | result: success | cantidad: %v",
-		betAmount,
-	)
+	response_length, err := c.SafeRead(2)
+	if err != nil {
+		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
+	fmt.Println(response_length)
+	response, err := c.SafeRead(int(binary.BigEndian.Uint16(response_length)))
+	fmt.Println(string(response))
+	if err != nil {
+		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
+	responseType, numberOfBets := c.ProcessResponseMultipleBet(response)
+
+	if responseType == MessageTypeSuccess {
+		log.Infof("action: respuesta_recibida | result: success | cantidad: %v",
+			numberOfBets,
+		)
+	} else {
+		log.Infof("action: respuesta_recibida | result: fail | cantidad: %v",
+			numberOfBets,
+		)
+	}
 }
 

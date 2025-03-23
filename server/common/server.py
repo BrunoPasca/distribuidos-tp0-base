@@ -20,6 +20,7 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+        self._last_bet_amount = 0
 
     def run(self):
         """
@@ -154,7 +155,8 @@ class Server:
         Inside each bet, fields are separated by a "|"
         """
         bets = message.split("\n")
-        bet_amount = len(bets)        
+        bet_amount = len(bets)
+        self._last_bet_amount = bet_amount
         valid_bets = []
         for bet in bets:
             fields, status = is_valid_message(bet)
@@ -216,7 +218,8 @@ class Server:
         Then the payload will be: 1|<number_of_bets>
         """
 
-        response = f"{response_error_code}|" # TODO: Add number of bets
+        response = f"{response_error_code}|{self._last_bet_amount}"
+        print(response)
         response = response.encode('utf-8')
         response_length = len(response).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response
