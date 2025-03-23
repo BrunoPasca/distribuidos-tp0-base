@@ -6,7 +6,10 @@ from common.constants import (
     ERROR_CODE_INVALID_MESSAGE,
     HEADER_LENGTH,
     MSG_LENGTH,
-    MSG_TYPE_BET
+    MSG_TYPE_BET,
+    DOCUMENT_POS,
+    BET_AMOUNT_POS,
+    RESPONSE_HEADER_LENGTH
 )
 
 class Server:
@@ -153,12 +156,12 @@ class Server:
         """
 
         if response_error_code == ERROR_CODE_NO_ERRORS:
-            response = f"{ERROR_CODE_NO_ERRORS}|{fields[3]}|{fields[5]}"
+            response = f"{ERROR_CODE_NO_ERRORS}|{fields[DOCUMENT_POS]}|{fields[BET_AMOUNT_POS]}"
         else:
             response = f"{ERROR_CODE_INVALID_MESSAGE}"
         
         response = response.encode('utf-8')
-        response_length = len(response).to_bytes(2, byteorder='big')
+        response_length = len(response).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response
         self.safe_send(sock, response)
         addr = sock.getpeername()
