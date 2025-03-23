@@ -15,6 +15,7 @@ import (
 const Delimiter = "|"
 const MessageTypeSuccess = 0
 const MessageTypeBet = 0
+const MessageTypeMultipleBet = 1
 const MessageTypePos = 4
 const HeaderLength = 5
 var log = logging.MustGetLogger("log")
@@ -269,7 +270,7 @@ func (c *Client) CreateBetsPacket(amount int) []byte {
 
 	header := make([]byte, HeaderLength)
 	binary.BigEndian.PutUint32(header[:MessageTypePos], uint32(payloadLength+HeaderLength))
-	header[MessageTypePos] = MessageTypeBet
+	header[MessageTypePos] = MessageTypeMultipleBet
 
 	packet := append(header, []byte(payload)...)
 	return packet
