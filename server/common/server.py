@@ -70,7 +70,7 @@ class Server:
         Accept new connections
 
         Function blocks until a connection to a client is made.
-        Then connection created is printed and returned
+        Then connection created is loggued and returned
         """
 
         # Connection arrived
@@ -193,8 +193,7 @@ class Server:
             return ((), ERROR_CODE_INVALID_MESSAGE)
         agency_id = int(message)
         self.agencies_waiting.add(agency_id)
-        print(f"agencies: {self.agencies}")
-        print(f"waiting: {self.agencies_waiting}")
+
         if len(self.agencies_waiting) == len(self.agencies) and (self.agencies == self.agencies_waiting):
             logging.info(f"action: sorteo | result: success")
             winners = get_winners()
