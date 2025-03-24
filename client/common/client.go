@@ -8,6 +8,7 @@ import (
 	"os"
 	"encoding/binary"
 	"strings"
+	"strconv"
 
 	"github.com/op/go-logging"
 )
@@ -247,8 +248,13 @@ func (c *Client) ProcessResponseMultipleBet(response []byte) (int, int) {
 	decoded_response := string(response)
 	parts := strings.Split(decoded_response, Delimiter)
 	responseType := int(parts[0][0] - '0') // We have to subtract a string 0 because a string 0 maps to int 48.
-	numberOfBets := int(parts[1][0] - '0') // We have to subtract a string 0 because a string 0 maps to int 48.
 
+	numberOfBets, err := strconv.Atoi(parts[1])
+	if err != nil {
+		log.Errorf("Failed to parse number of bets: %v", err)
+		numberOfBets = 0
+	}
+	
 	return responseType, numberOfBets
 }
 
