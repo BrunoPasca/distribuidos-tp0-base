@@ -1,6 +1,6 @@
 import socket
 import logging
-from common.utils import is_valid_message, Bet, store_bets
+from common.utils import is_valid_message, Bet, store_bets, get_winners
 from common.constants import (
     ERROR_CODE_NO_ERRORS, 
     ERROR_CODE_INVALID_MESSAGE,
@@ -8,10 +8,10 @@ from common.constants import (
     MSG_LENGTH,
     MSG_TYPE_SINGLE_BET,
     MSG_TYPE_MULTIPLE_BETS,
+    MSG_TYPE_READY_FOR_LOTTERY,
     DOCUMENT_POS,
     BET_AMOUNT_POS,
     RESPONSE_HEADER_LENGTH
-
 )
 
 class Server:
@@ -21,6 +21,10 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._last_bet_amount = 0
+        self.agencies = set()
+        self.agencies_waiting = []
+        self.winners = {}
+        
 
     def run(self):
         """
@@ -47,7 +51,7 @@ class Server:
         """
         try:
             msg, msg_type = self.__read_from_socket(client_sock)
-            fields, response_error_code = self.process_message(msg, client_sock.getpeername()[0], msg_type)
+            fields, response_error_code = self.process_message(msg, msg_type)
             self.handle_response(fields, response_error_code, client_sock, msg_type)
         except OSError as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
@@ -118,33 +122,35 @@ class Server:
             total_sent += sent
         return True
     
-    def process_message(self, message, sender, msg_type):
+    def process_message(self, message, msg_type):
         """
         Process message
 
         Function processes message and returns a response
         """
         if msg_type == MSG_TYPE_SINGLE_BET:
-            return self.process_message_single_bet(message, sender)
+            return self.process_message_single_bet(message)
         elif msg_type == MSG_TYPE_MULTIPLE_BETS:
-            return self.process_message_multiple_bets(message, sender)
-        else:
-            return ((), ERROR_CODE_INVALID_MESSAGE)
+            return self.process_message_multiple_bets(message)
+        elif msg_type == MSG_TYPE_READY_FOR_LOTTERY:
+            return self.process_message_ready_for_lottery(message)
+        return ((), ERROR_CODE_INVALID_MESSAGE)
 
-    def process_message_single_bet(self, message, sender):
+    def process_message_single_bet(self, message):
         """
         This function processes a single bet message and stores it in the bets file
         """
         fields, status = is_valid_message(message)
         if status == ERROR_CODE_INVALID_MESSAGE:
-            logging.error(f"action: receive_message | result: fail | error: invalid message | ip: {sender}")
+            logging.error(f"action: receive_message | result: fail | error: invalid message")
             return ((), ERROR_CODE_INVALID_MESSAGE)
         store_bets([Bet(*fields)])
         agency, name, last_name, document, birthdate, number = fields # Some fields might be useful in the future
+        self.agencies.add(agency)
         logging.info(f"action: apuesta_almacenada | result: success | dni: {document} | numero: {number}")
         return (fields, ERROR_CODE_NO_ERRORS)
     
-    def process_message_multiple_bets(self, message, sender):
+    def process_message_multiple_bets(self, message):
         """
         This function processes multiple bets at a time
         If all bets are valid, they are stored in the bets file
@@ -163,10 +169,25 @@ class Server:
             if status == ERROR_CODE_INVALID_MESSAGE:
                 logging.error(f"action: apuesta_recibida | result: fail | cantidad: {bet_amount}")
                 return ((), ERROR_CODE_INVALID_MESSAGE)
+            self.agencies.add(fields[0])
             valid_bets.append(Bet(*fields))
         store_bets(valid_bets)
         logging.info(f"action: apuesta_recibida | result: success | cantidad: {bet_amount}")
         return (fields, ERROR_CODE_NO_ERRORS)
+    
+    def process_message_ready_for_lottery(self, message):
+        """
+        This function processes the message that indicates an agency has finished
+        sending bets and is ready for the lottery
+        """
+        agency = int(message)
+        self.agencies_waiting.append(agency)
+        if len(self.agencies_waiting) == len(self.agencies):
+            logging.info(f"action: sorteo | result: success")
+            winners = get_winners()
+            self.winners = winners
+            return ((), ERROR_CODE_NO_ERRORS)
+        return ((), ERROR_CODE_NO_ERRORS)
 
     
     def handle_response(self, fields, response_error_code, sock, msg_type):
@@ -178,8 +199,9 @@ class Server:
             self.handle_bet_response(fields, response_error_code, sock)
         elif msg_type == MSG_TYPE_MULTIPLE_BETS:
             self.handle_multiple_bets_response(fields, response_error_code, sock)
-        else:
-            pass 
+        elif msg_type == MSG_TYPE_READY_FOR_LOTTERY:
+            self.handle_ready_for_lottery_response(fields, response_error_code, sock)
+        pass 
 
     def handle_bet_response(self, fields, response_error_code, sock):
         """
@@ -188,20 +210,25 @@ class Server:
 
         If the bet was received correctly, the response will be:
         2 bytes: length of the response
+        1 byte: message type
         Then the payload will be: 0|<document>|<number>
         If the bet was not received correctly, the response will be:
         2 bytes: length of the response
+        1 byte: message type
         Then the payload will be: 1|<document>|<number>
         """
 
         if response_error_code == ERROR_CODE_NO_ERRORS:
-            response = f"{ERROR_CODE_NO_ERRORS}|{fields[DOCUMENT_POS]}|{fields[BET_AMOUNT_POS]}"
+            response_payload = f"{ERROR_CODE_NO_ERRORS}|{fields[DOCUMENT_POS]}|{fields[BET_AMOUNT_POS]}"
         else:
-            response = f"{ERROR_CODE_INVALID_MESSAGE}"
+            response_payload = f"{ERROR_CODE_INVALID_MESSAGE}"
         
-        response = response.encode('utf-8')
-        response_length = len(response).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
+        response_bytes = response_payload.encode('utf-8')
+        response_with_type = bytes([MSG_TYPE_SINGLE_BET]) + response_bytes
+        
+        response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response
+        
         self.safe_send(sock, response)
         #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
     
@@ -212,16 +239,43 @@ class Server:
 
         If the bets were received correctly, the response will be:
         2 bytes: length of the response
+        1 byte: message type
         Then the payload will be: 0|<number_of_bets>
         If the bets were not received correctly, the response will be:
         2 bytes: length of the response
+        1 byte: message type
         Then the payload will be: 1|<number_of_bets>
         """
 
-        response = f"{response_error_code}|{self._last_bet_amount}"
-        print(response)
-        response = response.encode('utf-8')
-        response_length = len(response).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
+        response_payload = f"{response_error_code}|{self._last_bet_amount}"
+        
+        response_bytes = response_payload.encode('utf-8')
+        response_with_type = bytes([MSG_TYPE_MULTIPLE_BETS]) + response_bytes
+        
+        response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response
+        
+        self.safe_send(sock, response)
+        #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
+
+    def handle_ready_for_lottery_response(self, fields, response_error_code, sock):
+        """
+        This function sends a response to the client depending on the
+        whether the agency is ready for the lottery or not.
+
+        If the agency is ready for the lottery, the response will be:
+        2 byte the length of the response
+        1 byte: message type
+        Then the payload will be: 0 or 1 depending on the response_error_code
+        """
+
+        response_payload = f"{response_error_code}"
+        
+        response_bytes = response_payload.encode('utf-8')
+        response_with_type = bytes([MSG_TYPE_READY_FOR_LOTTERY]) + response_bytes
+        
+        response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
+        response = response_length + response
+        
         self.safe_send(sock, response)
         #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')

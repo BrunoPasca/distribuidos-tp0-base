@@ -10,6 +10,7 @@ HEADER_LENGTH = 5
 MSG_LENGTH = 4 # 4 bytes for the msg length
 MSG_TYPE_SINGLE_BET = 0
 MSG_TYPE_MULTIPLE_BETS = 1
+MSG_TYPE_READY_FOR_LOTTERY = 2
 DELIMITER = '|' # Delimiter used to separate fields in a message
 DOCUMENT_POS = 3
 BET_AMOUNT_POS = 5

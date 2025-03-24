@@ -97,3 +97,14 @@ def _validate_date(date: str) -> bool:
         return True
     except ValueError:
         return False
+    
+def get_winners() -> dict:
+    """
+    Returns a dictionary with the winners of the lottery for each agency.
+    """
+    winners = {}
+    for bet in load_bets():
+        if has_won(bet):
+            winners.get(bet.agency, [])
+            winners[bet.agency].append(bet.document)
+    return winners
