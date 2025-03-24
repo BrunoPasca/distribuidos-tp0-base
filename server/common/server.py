@@ -70,7 +70,9 @@ class Server:
         """
 
         # Connection arrived
+        logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
+        logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
 
     def __read_from_socket(self, sock) -> tuple[str, int]:
