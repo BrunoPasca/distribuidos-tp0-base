@@ -26,7 +26,6 @@ class Server:
         self.agencies = set()
         self.agencies_waiting = []
         self.winners = {}
-        
 
     def run(self):
         """
