@@ -8,6 +8,7 @@ import (
 	"os"
 	"encoding/binary"
 	"strings"
+	"strconv"
 
 	"github.com/op/go-logging"
 )
@@ -16,6 +17,7 @@ const Delimiter = "|"
 const MessageTypeSuccess = 0
 const MessageTypeBet = 0
 const MessageTypeMultipleBet = 1
+const MessageTypeReadyForLottery = 2
 const MessageTypePos = 4
 const HeaderLength = 5
 var log = logging.MustGetLogger("log")
@@ -103,7 +105,7 @@ func (c *Client) StartBettingLoop() {
 	// In each iteration it sends c.config.BatchMaxAmount bets to the server
 	// and waits for a response
 
-	file, err := os.Open("./bets.csv")
+	file, err := os.Open("./client_bets.csv")
 	if err != nil {
 		log.Errorf("action: open_file | result: fail | error: %v", err)
 		return
@@ -125,6 +127,10 @@ func (c *Client) StartBettingLoop() {
 	if len(bets) > 0 {
 		c.SendMultipleBets(bets)
 	}
+
+	// Now we have finished sending all the bets
+	// We can send a message to the server to let it know that we are ready for the lottery
+	c.sendReadyForLottery()
 }
 
 func (c *Client) SendMultipleBets(bets []string) {
@@ -144,6 +150,38 @@ func (c *Client) SendMultipleBets(bets []string) {
 	}
 	c.ReceiveMultipleBetResponse()
 }
+
+func (c *Client) sendReadyForLottery() {
+	// This function sends a message to the server to let it know that we are ready for the lottery
+	// The message has the format:
+	// 4 bytes for the message length
+	// 1 byte for the message type
+	// Payload: <clientId>
+
+	clientId := os.Getenv("CLI_ID")
+	payload := fmt.Sprintf("%s", clientId)
+	payloadLength := len(payload)
+	messageLength := payloadLength + HeaderLength
+	
+	message := make([]byte, messageLength)
+	binary.BigEndian.PutUint32(message[:MessageTypePos], uint32(messageLength))
+	message[MessageTypePos] = MessageTypeReadyForLottery
+	copy(message[HeaderLength:], payload)
+
+	c.createClientSocket()
+	defer c.conn.Close()
+	err := c.SafeWrite(message)
+	if err != nil {
+		log.Errorf("action: send_ready_for_lottery | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
+	c.ReceiveReadyForLotteryResponse()
+}
+	
 
 func (c *Client) Shutdown() {
 	if c.conn != nil {
@@ -223,12 +261,18 @@ func (c *Client) SendBet() {
 func (c *Client) ProcessResponseSingleBet(response []byte) (int, string, string) {
 	// This function processes the response received from the server
 	// The response has the format:
+	// First byte is the message type
 	// The rest has the format "responseType|document|betAmount"
 	// responseType is 0 if the bet was sent correctly or 1 if there was an error
 
-	// decode the response from bytes to string
-
-	decoded_response := string(response)
+	messageType := int(response[0])
+	
+	if messageType != MessageTypeBet {
+		log.Warningf("Unexpected message type received: %d, expected: %d", messageType, MessageTypeBet)
+	}
+	
+	// decode the rest of the response from bytes to string
+	decoded_response := string(response[1:])
 	parts := strings.Split(decoded_response, Delimiter)
 	responseType := int(parts[0][0] - '0') // We have to subtract a string 0 because a string 0 maps to int 48.
 	document := parts[1]
@@ -240,14 +284,25 @@ func (c *Client) ProcessResponseSingleBet(response []byte) (int, string, string)
 func (c *Client) ProcessResponseMultipleBet(response []byte) (int, int) {
 	// This function processes the response received from the server
 	// The response has the format:
+	// First byte is the message type
 	// The rest has the format "responseType|numberOfBets"
 	// responseType is 0 if the bet was sent correctly or 1 if there was an error
 
-	// decode the response from bytes to string
-	decoded_response := string(response)
+	messageType := int(response[0])
+	
+	if messageType != MessageTypeMultipleBet {
+		log.Warningf("Unexpected message type received: %d, expected: %d", messageType, MessageTypeMultipleBet)
+	}
+	
+	decoded_response := string(response[1:])
 	parts := strings.Split(decoded_response, Delimiter)
 	responseType := int(parts[0][0] - '0') // We have to subtract a string 0 because a string 0 maps to int 48.
-	numberOfBets := int(parts[1][0] - '0') // We have to subtract a string 0 because a string 0 maps to int 48.
+	
+	numberOfBets, err := strconv.Atoi(parts[1])
+	if err != nil {
+		log.Errorf("Failed to parse number of bets: %v", err)
+		numberOfBets = 0
+	}
 
 	return responseType, numberOfBets
 }
@@ -329,18 +384,16 @@ func (c *Client) ReceiveMultipleBetResponse() {
 
 	response_length, err := c.SafeRead(2)
 	if err != nil {
-		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
+		log.Errorf("action: respuesta_recibida | result: fail | client_id: %v | error: %v",
 			c.config.ID,
 			err,
 		)
 		return
 	}
 
-	fmt.Println(response_length)
 	response, err := c.SafeRead(int(binary.BigEndian.Uint16(response_length)))
-	fmt.Println(string(response))
 	if err != nil {
-		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
+		log.Errorf("action: respuesta_recibida | result: fail | client_id: %v | error: %v",
 			c.config.ID,
 			err,
 		)
@@ -357,6 +410,55 @@ func (c *Client) ReceiveMultipleBetResponse() {
 		log.Infof("action: respuesta_recibida | result: fail | cantidad: %v",
 			numberOfBets,
 		)
+	}
+}
+
+func (c *Client) ReceiveReadyForLotteryResponse() {
+	// This function receives a response for the ready for lottery message sent to the server
+	// this response can either be a success or an error
+	// It logs the result of the operation
+	// The success response occurs when the message was sent correctly
+	// The error response occurs when the message was not sent correctly
+	// The response has the format:
+	// 2 bytes for the response length
+	// Then 1 byte for the message type
+	// Then the payload with the format "responseType"
+	// responseType is 0 if the message was sent correctly or 1 if there was an error
+
+	response_length, err := c.SafeRead(2)
+	if err != nil {
+		log.Errorf("action: confirmacion_recibida | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
+	response, err := c.SafeRead(int(binary.BigEndian.Uint16(response_length)))
+	if err != nil {
+		log.Errorf("action: confirmacion_recibida | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
+	
+	if response[0] != MessageTypeReadyForLottery {
+		log.Errorf("action: confirmacion_recibida | result: fail | client_id: %v | error: unexpected message type %v, expected %v",
+			c.config.ID,
+			response[0],
+			MessageTypeReadyForLottery,
+		)
+		return
+	}
+
+	responseType := int(response[1] - '0') // We have to subtract '0' because a character '0' maps to int 48.
+
+	if responseType == MessageTypeSuccess {
+		log.Infof("action: respuesta_recibida | result: success")
+	} else {
+		log.Infof("action: respuesta_recibida | result: fail")
 	}
 }
 

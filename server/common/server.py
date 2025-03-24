@@ -227,7 +227,7 @@ class Server:
         response_with_type = bytes([MSG_TYPE_SINGLE_BET]) + response_bytes
         
         response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
-        response = response_length + response
+        response = response_length + response_with_type
         
         self.safe_send(sock, response)
         #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
@@ -253,10 +253,9 @@ class Server:
         response_with_type = bytes([MSG_TYPE_MULTIPLE_BETS]) + response_bytes
         
         response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
-        response = response_length + response
+        response = response_length + response_with_type
         
         self.safe_send(sock, response)
-        #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
 
     def handle_ready_for_lottery_response(self, fields, response_error_code, sock):
         """
@@ -275,7 +274,6 @@ class Server:
         response_with_type = bytes([MSG_TYPE_READY_FOR_LOTTERY]) + response_bytes
         
         response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
-        response = response_length + response
-        
+        response = response_length + response_with_type
+
         self.safe_send(sock, response)
-        #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
