@@ -174,6 +174,7 @@ class Server:
                 return ((), ERROR_CODE_INVALID_MESSAGE)
             valid_bets.append(Bet(*fields))
         store_bets(valid_bets)
+        logging.info(f"action: apuesta_recibida | result: success | cantidad: {bet_amount}")
         return (fields, ERROR_CODE_NO_ERRORS)
     
     def process_message_ready_for_lottery(self, message):
