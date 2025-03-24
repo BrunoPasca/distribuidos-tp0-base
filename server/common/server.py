@@ -5,6 +5,7 @@ from common.constants import (
     ERROR_CODE_NO_ERRORS, 
     ERROR_CODE_INVALID_MESSAGE,
     ERROR_CODE_UNEXPECTED_AGENCY,
+    ERROR_CODE_LOTTERY_NOT_READY,
     HEADER_LENGTH,
     MSG_LENGTH,
     MSG_TYPE_SINGLE_BET,
@@ -26,8 +27,13 @@ class Server:
         self.agencies = set()
         self.agencies_waiting = set()
         self.winners = {}
+        self.lottery_performed = False
+
 
     def run(self):
+        
+        
+
         """
         Dummy Server loop
 
@@ -193,6 +199,7 @@ class Server:
             logging.info(f"action: sorteo | result: success")
             winners = get_winners()
             self.winners = winners
+            self.lottery_performed = True
             return ((), ERROR_CODE_NO_ERRORS)
         return ((), ERROR_CODE_NO_ERRORS)
 
@@ -205,8 +212,10 @@ class Server:
         if not message.isdigit():
             return ((), ERROR_CODE_INVALID_MESSAGE)
         agency_id = int(message)
-        if not self.winners:
-            return ((), ERROR_CODE_NO_ERRORS)
+        
+        if not self.lottery_performed:
+            return ((), ERROR_CODE_LOTTERY_NOT_READY)
+            
         if agency_id not in self.winners:
             return ((), ERROR_CODE_UNEXPECTED_AGENCY)
         winners = self.winners[agency_id]
@@ -314,13 +323,12 @@ class Server:
         If the lottery did not happen, the response will be:
         2 byte the length of the response
         1 byte: message type
-        Then the payload will be: 1
+        Then the payload will be: 1 or 2 (unexpected agency or lottery not ready)
         """
-    
         if response_error_code == ERROR_CODE_NO_ERRORS:
             response_payload = f"{ERROR_CODE_NO_ERRORS}|{len(fields)}"
         else:
-            response_payload = f"{ERROR_CODE_UNEXPECTED_AGENCY}"
+            response_payload = f"{response_error_code}"
         
         response_bytes = response_payload.encode('utf-8')
         response_with_type = bytes([MSG_TYPE_AWAITING_LOTTERY]) + response_bytes
