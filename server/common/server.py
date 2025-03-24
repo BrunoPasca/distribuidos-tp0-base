@@ -24,7 +24,7 @@ class Server:
         self._server_socket.listen(listen_backlog)
         self._last_bet_amount = 0
         self.agencies = set()
-        self.agencies_waiting = []
+        self.agencies_waiting = set()
         self.winners = {}
 
     def run(self):
@@ -172,7 +172,7 @@ class Server:
             if status == ERROR_CODE_INVALID_MESSAGE:
                 logging.error(f"action: apuesta_recibida | result: fail | cantidad: {bet_amount}")
                 return ((), ERROR_CODE_INVALID_MESSAGE)
-            self.agencies.add(fields[0])
+            self.agencies.add(int(fields[0]))
             valid_bets.append(Bet(*fields))
         store_bets(valid_bets)
         logging.info(f"action: apuesta_recibida | result: success | cantidad: {bet_amount}")
@@ -186,8 +186,10 @@ class Server:
         if not message.isdigit():
             return ((), ERROR_CODE_INVALID_MESSAGE)
         agency_id = int(message)
-        self.agencies_waiting.append(agency_id)
-        if len(self.agencies_waiting) == len(self.agencies):
+        self.agencies_waiting.add(agency_id)
+        print(f"agencies: {self.agencies}")
+        print(f"waiting: {self.agencies_waiting}")
+        if len(self.agencies_waiting) == len(self.agencies) and (self.agencies == self.agencies_waiting):
             logging.info(f"action: sorteo | result: success")
             winners = get_winners()
             self.winners = winners
