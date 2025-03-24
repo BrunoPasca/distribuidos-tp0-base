@@ -445,14 +445,8 @@ func (c *Client) ReceiveMultipleBetResponse() {
 
 	responseType, numberOfBets := c.ProcessResponseMultipleBet(response)
 
-	if responseType == MessageTypeSuccess {
-		log.Infof("action: respuesta_recibida | result: success | cantidad: %v",
-			numberOfBets,
-		)
-	} else {
-		log.Infof("action: respuesta_recibida | result: fail | cantidad: %v",
-			numberOfBets,
-		)
+	if responseType != MessageTypeSuccess {
+		log.Infof("action: respuesta_recibida | result: fail ")
 	}
 }
 
@@ -498,11 +492,10 @@ func (c *Client) ReceiveReadyForLotteryResponse() {
 
 	responseType := int(response[1] - '0') // We have to subtract '0' because a character '0' maps to int 48.
 
-	if responseType == MessageTypeSuccess {
-		log.Infof("action: respuesta_recibida | result: success")
-	} else {
+
+	if responseType != MessageTypeSuccess {
 		log.Infof("action: respuesta_recibida | result: fail")
-	}
+	} 
 }
 
 func (c *Client) receiveLotteryFinished() (bool, int) {
