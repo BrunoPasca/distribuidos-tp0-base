@@ -70,9 +70,7 @@ class Server:
         """
 
         # Connection arrived
-        logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
-        logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
 
     def __read_from_socket(self, sock) -> tuple[str, int]:
@@ -176,7 +174,6 @@ class Server:
                 return ((), ERROR_CODE_INVALID_MESSAGE)
             valid_bets.append(Bet(*fields))
         store_bets(valid_bets)
-        logging.info(f"action: apuesta_recibida | result: success | cantidad: {bet_amount}")
         return (fields, ERROR_CODE_NO_ERRORS)
     
     def process_message_ready_for_lottery(self, message):
@@ -261,7 +258,6 @@ class Server:
         response = response_length + response_with_type
         
         self.safe_send(sock, response)
-        #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
     
     def handle_multiple_bets_response(self, fields, response_error_code, sock):
         """
