@@ -219,7 +219,6 @@ class Server:
         """
 
         response = f"{response_error_code}|{self._last_bet_amount}"
-        print(response)
         response = response.encode('utf-8')
         response_length = len(response).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response

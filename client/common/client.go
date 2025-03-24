@@ -336,9 +336,7 @@ func (c *Client) ReceiveMultipleBetResponse() {
 		return
 	}
 
-	fmt.Println(response_length)
 	response, err := c.SafeRead(int(binary.BigEndian.Uint16(response_length)))
-	fmt.Println(string(response))
 	if err != nil {
 		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
 			c.config.ID,
