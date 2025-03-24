@@ -104,7 +104,7 @@ func (c *Client) StartBettingLoop() {
 	// In each iteration it sends c.config.BatchMaxAmount bets to the server
 	// and waits for a response
 
-	file, err := os.Open("./bets.csv")
+	file, err := os.Open("./client_bets.csv")
 	if err != nil {
 		log.Errorf("action: open_file | result: fail | error: %v", err)
 		return
