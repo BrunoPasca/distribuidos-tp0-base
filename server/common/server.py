@@ -1,10 +1,10 @@
 import socket
 import logging
 from common.utils import is_valid_message, Bet, store_bets, get_winners
+import os
 from common.constants import (
     ERROR_CODE_NO_ERRORS, 
     ERROR_CODE_INVALID_MESSAGE,
-    ERROR_CODE_UNEXPECTED_AGENCY,
     ERROR_CODE_LOTTERY_NOT_READY,
     HEADER_LENGTH,
     MSG_LENGTH,
@@ -24,16 +24,12 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._last_bet_amount = 0
-        self.agencies = set()
         self.agencies_waiting = set()
         self.winners = {}
         self.lottery_performed = False
 
 
-    def run(self):
-        
-        
-
+    def run(self):        
         """
         Dummy Server loop
 
@@ -178,7 +174,6 @@ class Server:
             if status == ERROR_CODE_INVALID_MESSAGE:
                 logging.error(f"action: apuesta_recibida | result: fail | cantidad: {bet_amount}")
                 return ((), ERROR_CODE_INVALID_MESSAGE)
-            self.agencies.add(int(fields[0]))
             valid_bets.append(Bet(*fields))
         store_bets(valid_bets)
         logging.info(f"action: apuesta_recibida | result: success | cantidad: {bet_amount}")
@@ -194,7 +189,9 @@ class Server:
         agency_id = int(message)
         self.agencies_waiting.add(agency_id)
 
-        if len(self.agencies_waiting) == len(self.agencies) and (self.agencies == self.agencies_waiting):
+        client_amount = int(os.getenv('CLIENT_AMOUNT', 0))
+
+        if len(self.agencies_waiting) == client_amount:
             logging.info(f"action: sorteo | result: success")
             winners = get_winners()
             self.winners = winners

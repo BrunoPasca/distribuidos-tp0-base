@@ -25,6 +25,7 @@ services:
     entrypoint: python3 /main.py
     environment:
       - PYTHONUNBUFFERED=1
+      - CLIENT_AMOUNT=$num_clients
     volumes:
       - ./server/config.ini:/config.ini
     networks:
