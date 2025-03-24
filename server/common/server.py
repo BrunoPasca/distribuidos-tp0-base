@@ -4,11 +4,13 @@ from common.utils import is_valid_message, Bet, store_bets, get_winners
 from common.constants import (
     ERROR_CODE_NO_ERRORS, 
     ERROR_CODE_INVALID_MESSAGE,
+    ERROR_CODE_UNEXPECTED_AGENCY,
     HEADER_LENGTH,
     MSG_LENGTH,
     MSG_TYPE_SINGLE_BET,
     MSG_TYPE_MULTIPLE_BETS,
     MSG_TYPE_READY_FOR_LOTTERY,
+    MSG_TYPE_AWAITING_LOTTERY,
     DOCUMENT_POS,
     BET_AMOUNT_POS,
     RESPONSE_HEADER_LENGTH
@@ -134,6 +136,8 @@ class Server:
             return self.process_message_multiple_bets(message)
         elif msg_type == MSG_TYPE_READY_FOR_LOTTERY:
             return self.process_message_ready_for_lottery(message)
+        elif msg_type == MSG_TYPE_AWAITING_LOTTERY:
+            return self.process_message_awaiting_lottery(message)
         return ((), ERROR_CODE_INVALID_MESSAGE)
 
     def process_message_single_bet(self, message):
@@ -180,14 +184,27 @@ class Server:
         This function processes the message that indicates an agency has finished
         sending bets and is ready for the lottery
         """
-        agency = int(message)
-        self.agencies_waiting.append(agency)
+        self.agencies_waiting.append(message)
         if len(self.agencies_waiting) == len(self.agencies):
             logging.info(f"action: sorteo | result: success")
             winners = get_winners()
             self.winners = winners
             return ((), ERROR_CODE_NO_ERRORS)
         return ((), ERROR_CODE_NO_ERRORS)
+
+    def process_message_awaiting_lottery(self, message):
+        """
+        This function processes the message that indicates a client is waiting for the lottery
+        If we have winners then that means that the lottery already happened.
+        We return whether there are winners or not
+        """
+        if not self.winners:
+            return ((), ERROR_CODE_NO_ERRORS)
+        winners = self.winners
+        if message not in winners:
+            return ((), ERROR_CODE_UNEXPECTED_AGENCY)
+        winners = winners[message]
+        return (winners, ERROR_CODE_NO_ERRORS)
 
     
     def handle_response(self, fields, response_error_code, sock, msg_type):
@@ -201,6 +218,8 @@ class Server:
             self.handle_multiple_bets_response(fields, response_error_code, sock)
         elif msg_type == MSG_TYPE_READY_FOR_LOTTERY:
             self.handle_ready_for_lottery_response(fields, response_error_code, sock)
+        elif msg_type == MSG_TYPE_AWAITING_LOTTERY:
+            self.handle_awaiting_lottery_response(fields, response_error_code, sock)
         pass 
 
     def handle_bet_response(self, fields, response_error_code, sock):
@@ -276,4 +295,31 @@ class Server:
         response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response_with_type
 
+        self.safe_send(sock, response)
+
+    def handle_awaiting_lottery_response(self, fields, response_error_code, sock):
+        """
+        This function sends a response to the client letting them know
+        if the lottery happened or not.
+        If the lottery happened, the response will be:
+        2 byte the length of the response
+        1 byte: message type
+        Then the payload will be: 0|<number_of_winners>
+        If the lottery did not happen, the response will be:
+        2 byte the length of the response
+        1 byte: message type
+        Then the payload will be: 1
+        """
+    
+        if response_error_code == ERROR_CODE_NO_ERRORS:
+            response_payload = f"{ERROR_CODE_NO_ERRORS}|{len(fields)}"
+        else:
+            response_payload = f"{ERROR_CODE_UNEXPECTED_AGENCY}"
+        
+        response_bytes = response_payload.encode('utf-8')
+        response_with_type = bytes([MSG_TYPE_AWAITING_LOTTERY]) + response_bytes
+        
+        response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
+        response = response_length + response_with_type
+        
         self.safe_send(sock, response)
