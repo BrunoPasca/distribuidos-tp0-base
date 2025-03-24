@@ -18,6 +18,7 @@ const MessageTypeSuccess = 0
 const MessageTypeBet = 0
 const MessageTypeMultipleBet = 1
 const MessageTypeReadyForLottery = 2
+const MessageTypeAwaitingLottery = 3
 const MessageTypePos = 4
 const HeaderLength = 5
 var log = logging.MustGetLogger("log")
@@ -131,6 +132,20 @@ func (c *Client) StartBettingLoop() {
 	// Now we have finished sending all the bets
 	// We can send a message to the server to let it know that we are ready for the lottery
 	c.sendReadyForLottery()
+
+	// We can now wait for the lottery results, we do this 
+	// by sending a message to the server and waiting for a response
+	for {
+		c.createClientSocket()
+		defer c.conn.Close()
+		c.sendLotteryFinished()
+		lotteryFinished, winnersAmount := c.receiveLotteryFinished()
+		if lotteryFinished {
+			log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v", winnersAmount)
+			break
+		}
+		time.Sleep(c.config.LoopPeriod)
+	}
 }
 
 func (c *Client) SendMultipleBets(bets []string) {
@@ -181,6 +196,37 @@ func (c *Client) sendReadyForLottery() {
 
 	c.ReceiveReadyForLotteryResponse()
 }
+
+func (c *Client) sendLotteryFinished() {
+	// This function sends a message to the server querying
+	// to see if the lottery has finished
+	// The message has the format:
+	// 4 bytes for the message length
+	// 1 byte for the message type
+	// Payload: <clientId>
+
+	clientId := os.Getenv("CLI_ID")
+	payload := fmt.Sprintf("%s", clientId)
+	payloadLength := len(payload)
+	messageLength := payloadLength + HeaderLength
+
+	message := make([]byte, messageLength)
+	binary.BigEndian.PutUint32(message[:MessageTypePos], uint32(messageLength))
+	message[MessageTypePos] = MessageTypeAwaitingLottery
+	copy(message[HeaderLength:], payload)
+
+	c.createClientSocket()
+	defer c.conn.Close()
+	err := c.SafeWrite(message)
+	if err != nil {
+		log.Errorf("action: send_lottery_finished | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+}
+
 	
 
 func (c *Client) Shutdown() {
@@ -462,3 +508,60 @@ func (c *Client) ReceiveReadyForLotteryResponse() {
 	}
 }
 
+func (c *Client) receiveLotteryFinished() (bool, int) {
+	// This function receives a response for the lottery finished message sent to the server
+	// this response can either be a success or an error
+	// It logs the result of the operation
+	// The success response occurs when the message was sent correctly
+	// The error response occurs when the message was not sent correctly
+	// The response has the format:
+	// 2 bytes for the response length
+	// Then 1 byte for the message type
+	// Then the payload with the format "responseType|<winner_amount>|<winner1>|<winner2>|...|<winnerN>"
+	// responseType is 0 if the message was sent and the lottery has finished
+	// 1 if the message was sent but the lottery has not finished
+	// 2 if the message was not sent correctly
+
+	response_length, err := c.SafeRead(2)
+	if err != nil {
+		log.Errorf("action: confirmacion_recibida | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return false, 0
+	}
+
+	response, err := c.SafeRead(int(binary.BigEndian.Uint16(response_length)))
+	if err != nil {
+		log.Errorf("action: confirmacion_recibida | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return false, 0
+	}
+
+	
+	if response[0] != MessageTypeAwaitingLottery {
+		log.Errorf("action: confirmacion_recibida | result: fail | client_id: %v | error: unexpected message type %v, expected %v",
+			c.config.ID,
+			response[0],
+			MessageTypeAwaitingLottery,
+		)
+		return false, 0
+	}
+
+	decoded_response := string(response[1:])
+	parts := strings.Split(decoded_response, Delimiter)
+	responseType := int(parts[0][0] - '0') // We have to subtract a string 0 because a string 0 maps to int 48.
+	
+	if responseType == MessageTypeSuccess {
+		winnersAmount, err := strconv.Atoi(parts[1])
+		if err != nil {
+			log.Errorf("Failed to parse number of winners: %v", err)
+			winnersAmount = 0
+		}
+		return true, winnersAmount
+	} else {
+		return false, 0
+	}
+}
