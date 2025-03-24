@@ -137,9 +137,10 @@ func (c *Client) StartBettingLoop() {
 	// by sending a message to the server and waiting for a response
 	for {
 		c.createClientSocket()
-		defer c.conn.Close()
 		c.sendLotteryFinished()
+
 		lotteryFinished, winnersAmount := c.receiveLotteryFinished()
+		c.conn.Close()
 		if lotteryFinished {
 			log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v", winnersAmount)
 			break
@@ -215,8 +216,6 @@ func (c *Client) sendLotteryFinished() {
 	message[MessageTypePos] = MessageTypeAwaitingLottery
 	copy(message[HeaderLength:], payload)
 
-	c.createClientSocket()
-	defer c.conn.Close()
 	err := c.SafeWrite(message)
 	if err != nil {
 		log.Errorf("action: send_lottery_finished | result: fail | client_id: %v | error: %v",
@@ -226,8 +225,6 @@ func (c *Client) sendLotteryFinished() {
 		return
 	}
 }
-
-	
 
 func (c *Client) Shutdown() {
 	if c.conn != nil {

@@ -105,6 +105,7 @@ def get_winners() -> dict:
     winners = {}
     for bet in load_bets():
         if has_won(bet):
+            print(type(bet.agency))
             winners[bet.agency] = winners.get(bet.agency, [])
             winners[bet.agency].append(bet.document)
     return winners

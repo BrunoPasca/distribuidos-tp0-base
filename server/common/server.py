@@ -184,7 +184,10 @@ class Server:
         This function processes the message that indicates an agency has finished
         sending bets and is ready for the lottery
         """
-        self.agencies_waiting.append(message)
+        if not message.isdigit():
+            return ((), ERROR_CODE_INVALID_MESSAGE)
+        agency_id = int(message)
+        self.agencies_waiting.append(agency_id)
         if len(self.agencies_waiting) == len(self.agencies):
             logging.info(f"action: sorteo | result: success")
             winners = get_winners()
@@ -198,12 +201,14 @@ class Server:
         If we have winners then that means that the lottery already happened.
         We return whether there are winners or not
         """
+        if not message.isdigit():
+            return ((), ERROR_CODE_INVALID_MESSAGE)
+        agency_id = int(message)
         if not self.winners:
             return ((), ERROR_CODE_NO_ERRORS)
-        winners = self.winners
-        if message not in winners:
+        if agency_id not in self.winners:
             return ((), ERROR_CODE_UNEXPECTED_AGENCY)
-        winners = winners[message]
+        winners = self.winners[agency_id]
         return (winners, ERROR_CODE_NO_ERRORS)
 
     
@@ -321,5 +326,5 @@ class Server:
         
         response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response_with_type
-        
+
         self.safe_send(sock, response)
