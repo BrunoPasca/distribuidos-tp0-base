@@ -217,7 +217,8 @@ class Server:
             return ((), ERROR_CODE_LOTTERY_NOT_READY)
             
         if agency_id not in self.winners:
-            return ((), ERROR_CODE_UNEXPECTED_AGENCY)
+            return ([], ERROR_CODE_NO_ERRORS)
+        
         winners = self.winners[agency_id]
         return (winners, ERROR_CODE_NO_ERRORS)
 
