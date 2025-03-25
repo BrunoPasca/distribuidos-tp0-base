@@ -312,7 +312,7 @@ func (c *Client) CreateBetsPacket(bets []string) []byte {
 		bets[i] = fmt.Sprintf("%s|%s", clientId, strings.ReplaceAll(bet, ",", "|"))
 	}
 
-	payload := strings.Join(bets, betDelimiter)
+	payload := strings.Join(bets, BetDelimiter)
 	payloadLength := len(payload)
 
 	header := make([]byte, HeaderLength)
