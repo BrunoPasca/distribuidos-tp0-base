@@ -1,6 +1,7 @@
 import socket
 import logging
 from common.utils import is_valid_message, Bet, store_bets, get_winners
+from multiprocessing import Process, Lock, Manager
 import os
 from common.constants import (
     ERROR_CODE_NO_ERRORS, 
@@ -24,11 +25,17 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._last_bet_amount = 0
-        self.agencies_waiting = set()
-        self.winners = {}
-        self.lottery_performed = False
-
-
+        self._manager = Manager()
+        self.agencies_waiting = self._manager.dict() # We change from a set to a dict to be able to use the manager
+        self.winners = self._manager.dict()
+        self.lottery_performed = self._manager.Value('b', False)
+        
+        # Locks
+        self.agencies_lock = Lock()
+        self.winners_lock = Lock()
+        
+        self.processes = []
+        
     def run(self):        
         """
         Dummy Server loop
@@ -37,11 +44,39 @@ class Server:
         communication with a client. After client with communucation
         finishes, servers starts to accept new connections again
         """
-        while True:
-            client_sock = self.__accept_new_connection()
-            self.__handle_client_connection(client_sock)
+        try:
+            while True:
+                client_sock = self.__accept_new_connection()
+                
+                self._cleanup_processes()
+                
+                p = Process(target=self.__handle_client_connection, args=(client_sock,))
+#                p.daemon = True
+                p.start()
+                
+                self.processes.append(p)
+                logging.info(f"action: create_process | result: success | pid: {p.pid}")
+        except KeyboardInterrupt:
+            logging.info("action: keyboard_interrupt | result: shutting_down")
+            self.shutdown()
+            
+    def _cleanup_processes(self):
+        """Remove completed processes from the process list"""
+        self.processes = [p for p in self.processes if p.is_alive()]
 
     def shutdown(self):
+        """Terminate all processes and close the server socket"""
+        for p in self.processes:
+            if p.is_alive():
+                p.terminate()
+                logging.info(f"action: terminate_process | result: success | pid: {p.pid}")
+        
+        for p in self.processes:
+            p.join(timeout=1.0)
+            
+        if hasattr(self, '_manager'):
+            self._manager.shutdown()
+            
         self._server_socket.close()
         logging.info("action: close_server_socket | result: success")
 
@@ -151,7 +186,6 @@ class Server:
             return ((), ERROR_CODE_INVALID_MESSAGE)
         store_bets([Bet(*fields)])
         agency, name, last_name, document, birthdate, number = fields # Some fields might be useful in the future
-        self.agencies.add(agency)
         logging.info(f"action: apuesta_almacenada | result: success | dni: {document} | numero: {number}")
         return (fields, ERROR_CODE_NO_ERRORS)
     
@@ -187,15 +221,21 @@ class Server:
         if not message.isdigit():
             return ((), ERROR_CODE_INVALID_MESSAGE)
         agency_id = int(message)
-        self.agencies_waiting.add(agency_id)
+        
+        with self.agencies_lock:
+            self.agencies_waiting[agency_id] = True
+            client_amount = int(os.getenv('CLIENT_AMOUNT', 0))
+            agencies_ready = len(self.agencies_waiting)
 
-        client_amount = int(os.getenv('CLIENT_AMOUNT', 0))
-
-        if len(self.agencies_waiting) == client_amount:
+        if agencies_ready == client_amount:
             logging.info(f"action: sorteo | result: success")
             winners = get_winners()
-            self.winners = winners
-            self.lottery_performed = True
+            
+            with self.winners_lock:
+                for agency_id, winner_list in winners.items():
+                    self.winners[agency_id] = winner_list
+                self.lottery_performed.value = True
+                
             return ((), ERROR_CODE_NO_ERRORS)
         return ((), ERROR_CODE_NO_ERRORS)
 
@@ -209,13 +249,15 @@ class Server:
             return ((), ERROR_CODE_INVALID_MESSAGE)
         agency_id = int(message)
         
-        if not self.lottery_performed:
-            return ((), ERROR_CODE_LOTTERY_NOT_READY)
+        with self.winners_lock:
+            if not self.lottery_performed.value:
+                return ((), ERROR_CODE_LOTTERY_NOT_READY)
+                
+            if agency_id not in self.winners:
+                return ([], ERROR_CODE_NO_ERRORS)
             
-        if agency_id not in self.winners:
-            return ([], ERROR_CODE_NO_ERRORS)
-        
-        winners = self.winners[agency_id]
+            winners = self.winners[agency_id]
+            
         return (winners, ERROR_CODE_NO_ERRORS)
 
     

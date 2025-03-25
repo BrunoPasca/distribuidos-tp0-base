@@ -87,7 +87,7 @@ def _validate_name(name: str) -> bool:
     if len(name) == 0 or len(name) > MAX_NAME_LENGTH:
         return False
     for char in name:
-        if not char.isalpha() and not char.isspace():
+        if not char.isalpha() and not char.isspace() and char not in ['.', '-', "'"]:
             return False
     return True
 
