@@ -194,7 +194,6 @@ Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
 
-
 ## Solucion
 
 ### Ejercicio 1:
