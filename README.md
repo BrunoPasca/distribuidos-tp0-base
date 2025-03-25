@@ -178,3 +178,95 @@ Se espera que se redacte una sección del README en donde se indique cómo ejecu
 Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/tp0-tests) de caja negra. Se exige que la resolución de los ejercicios pase tales pruebas, o en su defecto que las discrepancias sean justificadas y discutidas con los docentes antes del día de la entrega. El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación. Respetar las entradas de log planteadas en los ejercicios, pues son las que se chequean en cada uno de los tests.
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+## Solucion
+
+### Ejercicio 1:
+
+Se generó un script bash `generar-compose.sh` que permite crear un archivo de Docker Compose con la cantidad de clientes especificada por línea de comandos. El script toma dos parámetros:
+
+1. `nombre_archivo`: El nombre del archivo Docker Compose a generar
+2. `cantidad_clientes`: La cantidad de clientes a incluir en la configuración
+
+El script valida los parámetros de entrada y genera un archivo YAML que incluye:
+- Un servicio para el servidor
+- El número especificado de servicios cliente (client1, client2, etc.)
+- Una configuración de red compartida para todos los servicios (propuesta por la catedra)
+
+La solución incluye variables de entorno predeterminadas y volúmenes para la configuración, siguiendo la estructura del proyecto base.
+
+Ejemplo de uso:
+```bash
+./generar-compose.sh docker-compose-dev.yaml 5
+```
+
+Este comando generará una configuración de Docker Compose con un servidor y 5 clientes, guardándola en el archivo `docker-compose-dev.yaml`.
+
+### Ejercicio 2:
+
+Se implementó un sistema de inyección de configuración mediante volúmenes Docker para evitar la reconstrucción de imágenes cuando solo se modifican parámetros de configuración.
+
+### Ejercicio 3:
+
+Se desarrolló un script bash `validar-echo-server.sh` para verificar el funcionamiento del echo server sin instalar netcat en la máquina host ni exponer puertos del servidor. La solución:
+
+1. Crea un contenedor temporal utilizando una imagen de Alpine ya existente, nos conectamos a la misma red que el echo server
+2. Utiliza netcat dentro del contenedor para enviar un mensaje de prueba al servidor
+
+### Ejercicio 4:
+
+Se implementó un mecanismo de terminación graceful para el cliente y el servidor que responde adecuadamente a señales SIGTERM. La implementación garantiza que todos los recursos del sistema (sockets de red, archivos abiertos, hilos de ejecución) sean liberados correctamente antes de finalizar la ejecución del programa principal.
+
+### Ejercicio 5:
+
+Modificacion logica de negocio:
+
+#### Cliente:
+El cliente emula a una agencia de quiniela. Recibe como variables de entorno  nombre, apellido, DNI, nacimiento, numero apostado. Y estos campos son utilizados para luego enviar una apuesta al servidor.
+
+#### Servidor: 
+Emula ser la central de Loteria Nacional. Recibe apuestas de los clientes y las almacena.
+
+#### Mensajes:
+Para implementar la comunicación entre cliente y servidor se diseñó un protocolo que garantiza la correcta transmisión de las apuestas. El protocolo para el envío de una apuesta individual es el siguiente:
+
+##### Formato de mensaje Cliente → Servidor (Apuesta individual)
+- **Header**: 
+  - 4 bytes: Longitud total del mensaje (incluyendo header y payload)
+  - 1 byte: Tipo de mensaje (0 para apuesta individual)
+- **Payload**: 
+  - Datos de la apuesta en formato: `clientId|nombre|apellido|documento|fechaNacimiento|numeroApostado`
+
+##### Formato de respuesta Servidor → Cliente
+- **Header**:
+  - 2 bytes: Longitud de la respuesta
+  - 1 byte: Tipo de mensaje (0 para respuesta a apuesta individual)
+- **Payload**:
+  - Código de resultado y datos confirmados: `codigoRespuesta|documento|numeroApostado`
+  - donde codigoRespuesta es 0 para éxito o 1 para error
+
+### Ejercicio 6:
+
+#### Cliente:
+Se modificó al cliente para que pueda enviar múltiples apuestas en un mismo mensaje (batch). El cliente ahora obtiene sus apuestas de un archivo CSV que se encuentra montado mediante un volumen Docker (cada cliente tiene su propio archivo correspondiente a su agencia, siguiendo el formato `.data/agency-{N}.csv`).
+
+El cliente posee una configuración que determina la cantidad máxima de apuestas que pueden entrar en un batch, calculada para no exceder los 8kB por paquete. El cliente envía múltiples batches hasta completar todas las apuestas del archivo.
+
+#### Servidor:
+El servidor procesa las apuestas recibidas en lotes, validando cada una de ellas. Si todas las apuestas son válidas, almacena la información y envía una confirmación al cliente. Si al menos una apuesta es inválida, ninguna se almacena y se informa al cliente del error.
+
+##### Formato de mensaje Cliente → Servidor (Batch de apuestas)
+- **Header**:
+  - 4 bytes: Longitud total del mensaje (incluyendo header y payload)
+  - 1 byte: Tipo de mensaje (1 para batch de apuestas)
+- **Payload**:
+  - Datos de múltiples apuestas separadas por '\n' con el formato:
+  - `clientId|nombre|apellido|documento|fechaNacimiento|numeroApostado`
+
+##### Formato de respuesta Servidor → Cliente (Batch de apuestas)
+- **Header**:
+  - 2 bytes: Longitud de la respuesta
+  - 1 byte: Tipo de mensaje (1 para respuesta a batch de apuestas)
+- **Payload**:
+  - `codigoRespuesta|cantidadApuestas`
+  - donde codigoRespuesta es 0 para éxito o 1 para error

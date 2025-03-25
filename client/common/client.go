@@ -19,6 +19,7 @@ const MessageTypeBet = 0
 const MessageTypeMultipleBet = 1
 const MessageTypePos = 4
 const HeaderLength = 5
+const BetDelimiter = "\n"
 var log = logging.MustGetLogger("log")
 
 // ClientConfig Configuration used by the client
@@ -311,7 +312,7 @@ func (c *Client) CreateBetsPacket(bets []string) []byte {
 		bets[i] = fmt.Sprintf("%s|%s", clientId, strings.ReplaceAll(bet, ",", "|"))
 	}
 
-	payload := strings.Join(bets, "\n")
+	payload := strings.Join(bets, betDelimiter)
 	payloadLength := len(payload)
 
 	header := make([]byte, HeaderLength)
