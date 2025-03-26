@@ -33,7 +33,9 @@ class Server:
         # Locks
         self.agencies_lock = Lock()
         self.winners_lock = Lock()
-        
+        self.reader_lock = Lock()
+        self.writer_lock = Lock()
+
         self.processes = []
         
     def run(self):        
@@ -184,7 +186,9 @@ class Server:
         if status == ERROR_CODE_INVALID_MESSAGE:
             logging.error(f"action: receive_message | result: fail | error: invalid message")
             return ((), ERROR_CODE_INVALID_MESSAGE)
-        store_bets([Bet(*fields)])
+        
+        with self.writer_lock: # We prevent others from writing
+            store_bets([Bet(*fields)])
         agency, name, last_name, document, birthdate, number = fields # Some fields might be useful in the future
         logging.info(f"action: apuesta_almacenada | result: success | dni: {document} | numero: {number}")
         return (fields, ERROR_CODE_NO_ERRORS)
@@ -209,7 +213,8 @@ class Server:
                 logging.error(f"action: apuesta_recibida | result: fail | cantidad: {bet_amount}")
                 return ((), ERROR_CODE_INVALID_MESSAGE)
             valid_bets.append(Bet(*fields))
-        store_bets(valid_bets)
+        with self.writer_lock:
+            store_bets(valid_bets)
         logging.info(f"action: apuesta_recibida | result: success | cantidad: {bet_amount}")
         return (fields, ERROR_CODE_NO_ERRORS)
     
@@ -229,7 +234,8 @@ class Server:
 
         if agencies_ready == client_amount:
             logging.info(f"action: sorteo | result: success")
-            winners = get_winners()
+            with self.reader_lock and self.writer_lock:
+                winners = get_winners()
             
             with self.winners_lock:
                 for agency_id, winner_list in winners.items():
