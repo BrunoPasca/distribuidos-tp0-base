@@ -325,3 +325,21 @@ El servidor espera una notificacion de todas las agencias (cantidad determinada 
   - Si el sorteo ya fue realizado: `0|cantidad_ganadores`
   - Si el sorteo no fue realizado aún: `1` (código de error indicando que no está listo)
 
+### Ejercicio 8:
+Se modificó el servidor para que soporte múltiples clientes en paralelo utilizando la biblioteca `multiprocessing` de Python.
+
+La implementación incluye:
+
+1. **Procesamiento en paralelo**: Para cada nueva conexión de cliente, se crea un proceso independiente que maneja toda la comunicación con ese cliente específico.
+
+2. **Recursos compartidos**: Se utiliza un `Manager` para gestionar estructuras de datos compartidas entre los procesos:
+   - `agencies_waiting`: Diccionario que registra qué agencias están esperando el sorteo
+   - `winners`: Diccionario con los ganadores organizados por agencia
+   - `lottery_performed`: Flag que indica si ya se realizó el sorteo
+
+3. **Mecanismos de sincronización**:
+   - `agencies_lock`: Protege el acceso al diccionario de agencias en espera
+   - `winners_lock`: Protege el acceso al diccionario de ganadores
+   - `reader_lock` y `writer_lock`: Protegen las operaciones de lectura y escritura en archivos compartidos
+
+4. **Gestión de procesos**: Se implementa un sistema de limpieza de procesos terminados para liberar recursos del sistema.
