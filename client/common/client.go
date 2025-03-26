@@ -148,6 +148,7 @@ func (c *Client) StartBettingLoop() {
 		}
 		time.Sleep(c.config.LoopPeriod)
 	}
+	time.Sleep(c.config.LoopPeriod)
 }
 
 func (c *Client) SendMultipleBets(bets []string) {
