@@ -126,6 +126,11 @@ func (c *Client) StartBettingLoop() {
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		log.Errorf("action: read_file | result: fail | error: %v", err)
+		return
+	}
+
 	if len(bets) > 0 {
 		c.SendMultipleBets(bets)
 	}
