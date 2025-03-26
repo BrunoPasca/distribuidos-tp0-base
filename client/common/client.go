@@ -452,8 +452,12 @@ func (c *Client) ReceiveMultipleBetResponse() {
 
 	responseType, numberOfBets := c.ProcessResponseMultipleBet(response)
 
-	if responseType != MessageTypeSuccess {
-		log.Infof("action: respuesta_recibida | result: fail | numero_apuestas: %v",
+	if responseType == MessageTypeSuccess {
+		log.Infof("action: respuesta_recibida | result: success | cantidad: %v",
+			numberOfBets,
+		)
+	} else {
+		log.Infof("action: respuesta_recibida | result: fail | cantidad: %v",
 			numberOfBets,
 		)
 	}
