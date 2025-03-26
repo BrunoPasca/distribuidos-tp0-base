@@ -148,6 +148,7 @@ func (c *Client) StartBettingLoop() {
 		}
 		time.Sleep(c.config.LoopPeriod)
 	}
+	time.Sleep(c.config.LoopPeriod)
 }
 
 func (c *Client) SendMultipleBets(bets []string) {
@@ -448,7 +449,8 @@ func (c *Client) ReceiveMultipleBetResponse() {
 
 	if responseType != MessageTypeSuccess {
 		log.Infof("action: respuesta_recibida | result: fail | numero_apuestas: %v",
-			numberOfBets,)
+			numberOfBets,
+		)
 	}
 }
 
