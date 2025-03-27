@@ -188,7 +188,7 @@ class Server:
         elif msg_type == MSG_TYPE_MULTIPLE_BETS:
             return self.handle_multiple_bets_response(fields, response_error_code, sock)
         else:
-            pass 
+            return False
 
     def handle_bet_response(self, fields, response_error_code, sock):
         """
