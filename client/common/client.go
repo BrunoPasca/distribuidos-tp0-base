@@ -132,6 +132,7 @@ func (c *Client) StartBettingLoop() {
 	if len(bets) > 0 {
 		c.SendMultipleBets(bets)
 	}
+	time.Sleep(c.config.LoopPeriod)
 }
 
 func (c *Client) SendMultipleBets(bets []string) {
