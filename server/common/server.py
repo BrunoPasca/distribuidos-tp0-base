@@ -9,7 +9,8 @@ from common.constants import (
     MSG_TYPE_BET,
     DOCUMENT_POS,
     BET_AMOUNT_POS,
-    RESPONSE_HEADER_LENGTH
+    RESPONSE_HEADER_LENGTH,
+    MAX_RETRIES
 )
 
 class Server:
@@ -112,13 +113,22 @@ class Server:
         logging.info(f"action: apuesta_almacenada | result: success | dni: {document} | numero: {number}")
         return (fields, ERROR_CODE_NO_ERRORS)
     
-    def safe_read(self, sock, length):
+    def safe_read(self, sock, length, max_retries=MAX_RETRIES):
         data = b''
+        retries = 0
         while len(data) < length:
-            packet = sock.recv(length - len(data))
-            if not packet: # This means the connection was closed and a short-read occurred
-                return None
-            data += packet
+            try:
+                 packet = sock.recv(length - len(data))
+                 if not packet:  # This means the connection was closed and a short-read occurred
+                     retries += 1
+                     if retries >= max_retries:
+                         return None
+                     continue
+                 data += packet
+            except:
+                 retries += 1
+                 if retries >= max_retries:
+                     return None
         return data
     
     def safe_send(self, sock, data):
@@ -136,9 +146,8 @@ class Server:
         depending on the message type
         """
         if msg_type == MSG_TYPE_BET:
-            self.handle_bet_response(fields, response_error_code, sock)
-        else:
-            pass # For now we should only be getting bets
+            return self.handle_bet_response(fields, response_error_code, sock)
+        return False # For now we should only be getting bets
 
     def handle_bet_response(self, fields, response_error_code, sock):
         """
@@ -161,7 +170,5 @@ class Server:
         response = response.encode('utf-8')
         response_length = len(response).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response
-        self.safe_send(sock, response)
-        addr = sock.getpeername()
-        #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
+        return self.safe_send(sock, response)
         
