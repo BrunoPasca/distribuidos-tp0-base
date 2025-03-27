@@ -10,8 +10,8 @@ from common.constants import (
     MSG_TYPE_MULTIPLE_BETS,
     DOCUMENT_POS,
     BET_AMOUNT_POS,
-    RESPONSE_HEADER_LENGTH
-
+    RESPONSE_HEADER_LENGTH,
+    MAX_RETRIES
 )
 
 class Server:
@@ -100,13 +100,22 @@ class Server:
         addr = sock.getpeername()        
         return (payload_str, msg_type)
     
-    def safe_read(self, sock, length):
+    def safe_read(self, sock, length, max_retries=MAX_RETRIES):
         data = b''
+        retries = 0
         while len(data) < length:
-            packet = sock.recv(length - len(data))
-            if not packet: # This means the connection was closed and a short-read occurred
-                return None
-            data += packet
+            try:
+                 packet = sock.recv(length - len(data))
+                 if not packet:  # This means the connection was closed and a short-read occurred
+                     retries += 1
+                     if retries >= max_retries:
+                         return None
+                     continue
+                 data += packet
+            except:
+                 retries += 1
+                 if retries >= max_retries:
+                     return None
         return data
     
     def safe_send(self, sock, data):
@@ -175,9 +184,9 @@ class Server:
         depending on the message type
         """
         if msg_type == MSG_TYPE_SINGLE_BET:
-            self.handle_bet_response(fields, response_error_code, sock)
+            return self.handle_bet_response(fields, response_error_code, sock)
         elif msg_type == MSG_TYPE_MULTIPLE_BETS:
-            self.handle_multiple_bets_response(fields, response_error_code, sock)
+            return self.handle_multiple_bets_response(fields, response_error_code, sock)
         else:
             pass 
 
@@ -202,8 +211,7 @@ class Server:
         response = response.encode('utf-8')
         response_length = len(response).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response
-        self.safe_send(sock, response)
-        #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
+        return self.safe_send(sock, response)
     
     def handle_multiple_bets_response(self, fields, response_error_code, sock):
         """
@@ -222,5 +230,4 @@ class Server:
         response = response.encode('utf-8')
         response_length = len(response).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response
-        self.safe_send(sock, response)
-        #logging.info(f'action: send_message | result: success | ip: {addr[0]} | response: {response.decode("utf-8")}')
+        return self.safe_send(sock, response)
