@@ -59,6 +59,7 @@ func (c *Client) createClientSocket() error {
 			c.config.ID,
 			err,
 		)
+		return err
 	}
 	c.conn = conn
 	return nil
@@ -121,7 +122,10 @@ func (c *Client) StartBettingLoop() {
 		bets = append(bets, scanner.Text())
 
 		if len(bets) == c.config.BatchMaxAmount {
-			c.SendMultipleBets(bets)
+			if err := c.SendMultipleBets(bets); err != nil {
+				log.Errorf("action: send_multiple_bets | result: fail | error: %v", err)
+				return
+			}
 			bets = nil // Reset the batch
 		}
 	}
@@ -132,21 +136,40 @@ func (c *Client) StartBettingLoop() {
 	}
 
 	if len(bets) > 0 {
-		c.SendMultipleBets(bets)
+		if err := c.SendMultipleBets(bets); err != nil {
+			log.Errorf("action: send_multiple_bets | result: fail | error: %v", err)
+			return
+		}
 	}
 
 	// Now we have finished sending all the bets
 	// We can send a message to the server to let it know that we are ready for the lottery
-	c.sendReadyForLottery()
+	if err := c.sendReadyForLottery(); err != nil {
+		log.Errorf("action: send_ready_for_lottery | result: fail | error: %v", err)
+		return
+	}
 
 	// We can now wait for the lottery results, we do this 
 	// by sending a message to the server and waiting for a response
 	for {
-		c.createClientSocket()
-		c.sendLotteryFinished()
+		if err := c.createClientSocket(); err != nil {
+			log.Errorf("action: create_client_socket | result: fail | error: %v", err)
+			return
+		}
 
-		lotteryFinished, winnersAmount := c.receiveLotteryFinished()
+		if err := c.sendLotteryFinished(); err != nil {
+			c.conn.Close()
+			log.Errorf("action: send_lottery_finished | result: fail | error: %v", err)
+			return
+		}
+
+		lotteryFinished, winnersAmount, err := c.receiveLotteryFinished()
 		c.conn.Close()
+		if err != nil {
+			log.Errorf("action: receive_lottery_finished | result: fail | error: %v", err)
+			return
+		}
+		
 		if lotteryFinished {
 			log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v", winnersAmount)
 			break
@@ -156,25 +179,23 @@ func (c *Client) StartBettingLoop() {
 	time.Sleep(c.config.LoopPeriod)
 }
 
-func (c *Client) SendMultipleBets(bets []string) {
+func (c *Client) SendMultipleBets(bets []string) error {
 	// This function sends a bet to the server and waits for a response
 
-	c.createClientSocket()
+	if err := c.createClientSocket(); err != nil {
+		return err
+	}
 	defer c.conn.Close()
 	
 	packet := c.CreateBetsPacket(bets)
-	err := c.SafeWrite(packet)
-	if err != nil {
-		log.Errorf("action: send_packet | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
+	if err := c.SafeWrite(packet); err != nil {
+		return err
 	}
-	c.ReceiveMultipleBetResponse()
+	
+	return c.ReceiveMultipleBetResponse()
 }
 
-func (c *Client) sendReadyForLottery() {
+func (c *Client) sendReadyForLottery() error {
 	// This function sends a message to the server to let it know that we are ready for the lottery
 	// The message has the format:
 	// 4 bytes for the message length
@@ -191,21 +212,19 @@ func (c *Client) sendReadyForLottery() {
 	message[MessageTypePos] = MessageTypeReadyForLottery
 	copy(message[HeaderLength:], payload)
 
-	c.createClientSocket()
+	if err := c.createClientSocket(); err != nil {
+		return err
+	}
 	defer c.conn.Close()
-	err := c.SafeWrite(message)
-	if err != nil {
-		log.Errorf("action: send_ready_for_lottery | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
+	
+	if err := c.SafeWrite(message); err != nil {
+		return err
 	}
 
-	c.ReceiveReadyForLotteryResponse()
+	return c.ReceiveReadyForLotteryResponse()
 }
 
-func (c *Client) sendLotteryFinished() {
+func (c *Client) sendLotteryFinished() error {
 	// This function sends a message to the server querying
 	// to see if the lottery has finished
 	// The message has the format:
@@ -223,14 +242,7 @@ func (c *Client) sendLotteryFinished() {
 	message[MessageTypePos] = MessageTypeAwaitingLottery
 	copy(message[HeaderLength:], payload)
 
-	err := c.SafeWrite(message)
-	if err != nil {
-		log.Errorf("action: send_lottery_finished | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
-	}
+	return c.SafeWrite(message)
 }
 
 func (c *Client) Shutdown() {
@@ -421,33 +433,19 @@ func (c *Client) CreateBetsPacket(bets []string) []byte {
 	return packet
 }
 
-func (c *Client) ReceiveMultipleBetResponse() {
+func (c *Client) ReceiveMultipleBetResponse() error {
 	// This function receives a response for multiple bets sent to the server
 	// this response can either be a success or an error
 	// It logs the result of the operation
-	// The success response occurs when all the bets were sent correctly
-	// The error response occurs when at least one bet was not sent correctly
-	// The response has the format:
-	// 2 bytes for the response length
-	// then the payload with the format "responseType|numberOfBets"
-	// responseType is 0 if the bets were sent correctly or 1 if there was an error
-
+	
 	response_length, err := c.SafeRead(2)
 	if err != nil {
-		log.Errorf("action: respuesta_recibida | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
+		return err
 	}
 
 	response, err := c.SafeRead(int(binary.BigEndian.Uint16(response_length)))
 	if err != nil {
-		log.Errorf("action: respuesta_recibida | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
+		return err
 	}
 
 	responseType, numberOfBets := c.ProcessResponseMultipleBet(response)
@@ -457,96 +455,51 @@ func (c *Client) ReceiveMultipleBetResponse() {
 			numberOfBets,
 		)
 	}
+	
+	return nil
 }
 
-func (c *Client) ReceiveReadyForLotteryResponse() {
+func (c *Client) ReceiveReadyForLotteryResponse() error {
 	// This function receives a response for the ready for lottery message sent to the server
-	// this response can either be a success or an error
-	// It logs the result of the operation
-	// The success response occurs when the message was sent correctly
-	// The error response occurs when the message was not sent correctly
-	// The response has the format:
-	// 2 bytes for the response length
-	// Then 1 byte for the message type
-	// Then the payload with the format "responseType"
-	// responseType is 0 if the message was sent correctly or 1 if there was an error
-
+	
 	response_length, err := c.SafeRead(2)
 	if err != nil {
-		log.Errorf("action: confirmacion_recibida | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
+		return err
 	}
 
 	response, err := c.SafeRead(int(binary.BigEndian.Uint16(response_length)))
 	if err != nil {
-		log.Errorf("action: confirmacion_recibida | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
+		return err
 	}
-
 	
 	if response[0] != MessageTypeReadyForLottery {
-		log.Errorf("action: confirmacion_recibida | result: fail | client_id: %v | error: unexpected message type %v, expected %v",
-			c.config.ID,
-			response[0],
-			MessageTypeReadyForLottery,
-		)
-		return
+		return fmt.Errorf("unexpected message type %v, expected %v", response[0], MessageTypeReadyForLottery)
 	}
 
 	responseType := int(response[1] - '0') // We have to subtract '0' because a character '0' maps to int 48.
 
-
 	if responseType != MessageTypeSuccess {
 		log.Infof("action: respuesta_recibida | result: fail")
 	} 
+	
+	return nil
 }
 
-func (c *Client) receiveLotteryFinished() (bool, int) {
+func (c *Client) receiveLotteryFinished() (bool, int, error) {
 	// This function receives a response for the lottery finished message sent to the server
-	// this response can either be a success or an error
-	// It logs the result of the operation
-	// The success response occurs when the message was sent correctly
-	// The error response occurs when the message was not sent correctly
-	// The response has the format:
-	// 2 bytes for the response length
-	// Then 1 byte for the message type
-	// Then the payload with the format "responseType|<winner_amount>|<winner1>|<winner2>|...|<winnerN>"
-	// responseType is 0 if the message was sent and the lottery has finished
-	// 1 if the message was sent but the lottery has not finished
-	// 2 if the message was not sent correctly
-
+	
 	response_length, err := c.SafeRead(2)
 	if err != nil {
-		log.Errorf("action: confirmacion_recibida | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return false, 0
+		return false, 0, err
 	}
 
 	response, err := c.SafeRead(int(binary.BigEndian.Uint16(response_length)))
 	if err != nil {
-		log.Errorf("action: confirmacion_recibida | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return false, 0
+		return false, 0, err
 	}
-
 	
 	if response[0] != MessageTypeAwaitingLottery {
-		log.Errorf("action: confirmacion_recibida | result: fail | client_id: %v | error: unexpected message type %v, expected %v",
-			c.config.ID,
-			response[0],
-			MessageTypeAwaitingLottery,
-		)
-		return false, 0
+		return false, 0, fmt.Errorf("unexpected message type %v, expected %v", response[0], MessageTypeAwaitingLottery)
 	}
 
 	decoded_response := string(response[1:])
@@ -556,11 +509,10 @@ func (c *Client) receiveLotteryFinished() (bool, int) {
 	if responseType == MessageTypeSuccess {
 		winnersAmount, err := strconv.Atoi(parts[1])
 		if err != nil {
-			log.Errorf("Failed to parse number of winners: %v", err)
-			winnersAmount = 0
+			return false, 0, fmt.Errorf("failed to parse number of winners: %v", err)
 		}
-		return true, winnersAmount
+		return true, winnersAmount, nil
 	} else {
-		return false, 0
+		return false, 0, nil
 	}
 }
