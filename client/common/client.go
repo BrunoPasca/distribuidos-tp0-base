@@ -53,6 +53,7 @@ func (c *Client) createClientSocket() error {
 			c.config.ID,
 			err,
 		)
+		return err
 	}
 	c.conn = conn
 	return nil
@@ -98,9 +99,21 @@ func (c *Client) StartClientLoop() {
 
 func (c *Client) StartClientBetSending() {
 	// This function sends a bet to the server and waits for a response
-	c.createClientSocket()
-	c.SendBet()
-	c.ReceiveBetResponse()
+	if err := c.createClientSocket(); err != nil {
+		log.Errorf("action: create_client_socket | result: fail | error: %v", err)
+		return
+	}
+	defer c.conn.Close()
+	
+	if err := c.SendBet(); err != nil {
+		log.Errorf("action: send_bet | result: fail | error: %v", err)
+		return
+	}
+	
+	if err := c.ReceiveBetResponse(); err != nil {
+		log.Errorf("action: receive_bet_response | result: fail | error: %v", err)
+		return
+	}
 }
 
 func (c *Client) Shutdown() {
@@ -164,12 +177,12 @@ func GenerateMessage() []byte {
 	return message
 }
 
-func (c *Client) SendBet() {
+func (c *Client) SendBet() error {
 	// This function sends a bet to the server
 	// The bet is formed by the GenerateMessage function
 	// The message is sent to the server
 	message := GenerateMessage()
-	c.SafeWrite(message)
+	return c.SafeWrite(message)
 }
 
 func (c *Client) ProcessResponse(response []byte) (int, string, string) {
@@ -189,27 +202,19 @@ func (c *Client) ProcessResponse(response []byte) (int, string, string) {
 	return responseType, document, betAmount
 }
 
-func (c *Client) ReceiveBetResponse() {
+func (c *Client) ReceiveBetResponse() error {
 	// This function receives a response for the bet sent to the server
 	// And validates if the bet was sent correctly.
 	// It logs the result of the operation
 
 	response_length, err := c.SafeRead(2)
 	if err != nil {
-		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
+		return err
 	}
 
 	response, err := c.SafeRead(int(binary.BigEndian.Uint16(response_length)))
 	if err != nil {
-		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
+		return err
 	}
 
 	responseType, document, betAmount := c.ProcessResponse(response)
@@ -226,5 +231,7 @@ func (c *Client) ReceiveBetResponse() {
 			betAmount,
 		)
 	}
+	
+	return nil
 }
 
