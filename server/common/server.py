@@ -105,13 +105,13 @@ class Server:
         retries = 0
         while len(data) < length:
             try:
-                 packet = sock.recv(length - len(data))
-                 if not packet:  # This means the connection was closed and a short-read occurred
-                     retries += 1
-                     if retries >= max_retries:
-                         return None
-                     continue
-                 data += packet
+                packet = sock.recv(length - len(data))
+                if not packet:  # This means the connection was closed and a short-read occurred
+                    retries += 1
+                    if retries >= max_retries:
+                        return None
+                    continue
+                data += packet
             except:
                  retries += 1
                  if retries >= max_retries:
