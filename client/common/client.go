@@ -117,6 +117,8 @@ func (c *Client) StartBettingLoop() {
 	scanner := bufio.NewScanner(file)
 	var bets []string
 
+	c.createClientSocket()
+
 	for scanner.Scan() {
 		bets = append(bets, scanner.Text())
 
@@ -131,9 +133,12 @@ func (c *Client) StartBettingLoop() {
 		return
 	}
 
+
 	if len(bets) > 0 {
 		c.SendMultipleBets(bets)
 	}
+
+	c.conn.Close()
 
 	// Now we have finished sending all the bets
 	// We can send a message to the server to let it know that we are ready for the lottery
@@ -158,9 +163,6 @@ func (c *Client) StartBettingLoop() {
 
 func (c *Client) SendMultipleBets(bets []string) {
 	// This function sends a bet to the server and waits for a response
-
-	c.createClientSocket()
-	defer c.conn.Close()
 	
 	packet := c.CreateBetsPacket(bets)
 	err := c.SafeWrite(packet)

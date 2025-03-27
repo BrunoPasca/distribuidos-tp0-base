@@ -15,7 +15,8 @@ from common.constants import (
     MSG_TYPE_AWAITING_LOTTERY,
     DOCUMENT_POS,
     BET_AMOUNT_POS,
-    RESPONSE_HEADER_LENGTH
+    RESPONSE_HEADER_LENGTH,
+    MAX_RETRIES
 )
 
 class Server:
@@ -53,7 +54,6 @@ class Server:
                 self._cleanup_processes()
                 
                 p = Process(target=self.__handle_client_connection, args=(client_sock,))
-#                p.daemon = True
                 p.start()
                 
                 self.processes.append(p)
@@ -84,15 +84,20 @@ class Server:
 
     def __handle_client_connection(self, client_sock):
         """
-        Read message from a specific client socket and closes the socket
+        Handle a persistent connection with a client socket, allowing multiple messages.
 
         If a problem arises in the communication with the client, the
-        client socket will also be closed
+        client socket will be closed.
         """
         try:
-            msg, msg_type = self.__read_from_socket(client_sock)
-            fields, response_error_code = self.process_message(msg, msg_type)
-            self.handle_response(fields, response_error_code, client_sock, msg_type)
+            while True:
+                msg, msg_type = self.__read_from_socket(client_sock)
+                if not msg or msg_type == -1:  # If the message is empty, assume the client closed the connection
+                    logging.info("action: client_disconnected | result: success")
+                    break
+                fields, response_error_code = self.process_message(msg, msg_type)
+                if not self.handle_response(fields, response_error_code, client_sock, msg_type):
+                    break
         except OSError as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
         finally:
@@ -126,7 +131,6 @@ class Server:
         """
         header = self.safe_read(sock, HEADER_LENGTH)
         if not header:
-            logging.error('action: receive_message | result: fail | error: short-read')
             return ("", -1)
         msg_length = int.from_bytes(header[:MSG_LENGTH], byteorder='big')
         msg_type = header[4]
@@ -135,7 +139,6 @@ class Server:
         if payload_length > 0:
             payload = self.safe_read(sock, payload_length)
             if not payload:
-                logging.error('action: receive_message | result: fail | error: short-read')
                 return ("", -1)
             payload_str = payload.decode('utf-8').strip()
         else:
@@ -144,13 +147,22 @@ class Server:
         addr = sock.getpeername()        
         return (payload_str, msg_type)
     
-    def safe_read(self, sock, length):
+    def safe_read(self, sock, length, max_retries=MAX_RETRIES):
         data = b''
+        retries = 0
         while len(data) < length:
-            packet = sock.recv(length - len(data))
-            if not packet: # This means the connection was closed and a short-read occurred
-                return None
-            data += packet
+            try:
+                packet = sock.recv(length - len(data))
+                if not packet:  # This means the connection was closed and a short-read occurred
+                    retries += 1
+                    if retries >= max_retries:
+                        return None
+                    continue
+                data += packet
+            except:
+                retries += 1
+                if retries >= max_retries:
+                    return None
         return data
     
     def safe_send(self, sock, data):
@@ -273,14 +285,14 @@ class Server:
         depending on the message type
         """
         if msg_type == MSG_TYPE_SINGLE_BET:
-            self.handle_bet_response(fields, response_error_code, sock)
+            return self.handle_bet_response(fields, response_error_code, sock)
         elif msg_type == MSG_TYPE_MULTIPLE_BETS:
-            self.handle_multiple_bets_response(fields, response_error_code, sock)
+            return self.handle_multiple_bets_response(fields, response_error_code, sock)
         elif msg_type == MSG_TYPE_READY_FOR_LOTTERY:
-            self.handle_ready_for_lottery_response(fields, response_error_code, sock)
+            return self.handle_ready_for_lottery_response(fields, response_error_code, sock)
         elif msg_type == MSG_TYPE_AWAITING_LOTTERY:
-            self.handle_awaiting_lottery_response(fields, response_error_code, sock)
-        pass 
+            return self.handle_awaiting_lottery_response(fields, response_error_code, sock)
+        return False 
 
     def handle_bet_response(self, fields, response_error_code, sock):
         """
@@ -308,7 +320,7 @@ class Server:
         response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response_with_type
         
-        self.safe_send(sock, response)
+        return self.safe_send(sock, response)
     
     def handle_multiple_bets_response(self, fields, response_error_code, sock):
         """
@@ -333,7 +345,7 @@ class Server:
         response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response_with_type
         
-        self.safe_send(sock, response)
+        return self.safe_send(sock, response)
 
     def handle_ready_for_lottery_response(self, fields, response_error_code, sock):
         """
@@ -354,7 +366,7 @@ class Server:
         response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response_with_type
 
-        self.safe_send(sock, response)
+        return self.safe_send(sock, response)
 
     def handle_awaiting_lottery_response(self, fields, response_error_code, sock):
         """
@@ -380,4 +392,4 @@ class Server:
         response_length = len(response_with_type).to_bytes(RESPONSE_HEADER_LENGTH, byteorder='big')
         response = response_length + response_with_type
 
-        self.safe_send(sock, response)
+        return self.safe_send(sock, response)
