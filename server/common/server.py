@@ -92,7 +92,7 @@ class Server:
         try:
             while True:
                 msg, msg_type = self.__read_from_socket(client_sock)
-                if not msg or msg_type == -1:  # If the message is empty, assume the client closed the connection
+                if not msg or msg_type == -1:
                     logging.info("action: client_disconnected | result: success")
                     break
                 fields, response_error_code = self.process_message(msg, msg_type)
