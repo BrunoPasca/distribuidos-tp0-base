@@ -57,6 +57,7 @@ func (c *Client) createClientSocket() error {
 			c.config.ID,
 			err,
 		)
+		return err
 	}
 	c.conn = conn
 	return nil
@@ -119,7 +120,10 @@ func (c *Client) StartBettingLoop() {
 		bets = append(bets, scanner.Text())
 
 		if len(bets) == c.config.BatchMaxAmount {
-			c.SendMultipleBets(bets)
+			if err := c.SendMultipleBets(bets); err != nil {
+				log.Errorf("action: send_multiple_bets | result: fail | error: %v", err)
+				return
+			}
 			bets = nil // Reset the batch
 		}
 	}
@@ -130,27 +134,28 @@ func (c *Client) StartBettingLoop() {
 	}
 
 	if len(bets) > 0 {
-		c.SendMultipleBets(bets)
+		if err := c.SendMultipleBets(bets); err != nil {
+			log.Errorf("action: send_multiple_bets | result: fail | error: %v", err)
+			return
+		}
 	}
 	time.Sleep(c.config.LoopPeriod)
 }
 
-func (c *Client) SendMultipleBets(bets []string) {
+func (c *Client) SendMultipleBets(bets []string) error {
 	// This function sends a bet to the server and waits for a response
 
-	c.createClientSocket()
+	if err := c.createClientSocket(); err != nil {
+		return err
+	}
 	defer c.conn.Close()
 	
 	packet := c.CreateBetsPacket(bets)
 	err := c.SafeWrite(packet)
 	if err != nil {
-		log.Errorf("action: send_packet | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
+		return err
 	}
-	c.ReceiveMultipleBetResponse()
+	return c.ReceiveMultipleBetResponse()
 }
 
 func (c *Client) Shutdown() {
@@ -220,12 +225,12 @@ func GenerateMessage() []byte {
 	return message
 }
 
-func (c *Client) SendBet() {
+func (c *Client) SendBet() error {
 	// This function sends a bet to the server
 	// The bet is formed by the GenerateMessage function
 	// The message is sent to the server
 	message := GenerateMessage()
-	c.SafeWrite(message)
+	return c.SafeWrite(message)
 }
 
 func (c *Client) ProcessResponseSingleBet(response []byte) (int, string, string) {
@@ -329,33 +334,18 @@ func (c *Client) CreateBetsPacket(bets []string) []byte {
 	return packet
 }
 
-func (c *Client) ReceiveMultipleBetResponse() {
+func (c *Client) ReceiveMultipleBetResponse() error {
 	// This function receives a response for multiple bets sent to the server
 	// this response can either be a success or an error
-	// It logs the result of the operation
-	// The success response occurs when all the bets were sent correctly
-	// The error response occurs when at least one bet was not sent correctly
-	// The response has the format:
-	// 2 bytes for the response length
-	// then the payload with the format "responseType|numberOfBets"
-	// responseType is 0 if the bets were sent correctly or 1 if there was an error
 
 	response_length, err := c.SafeRead(2)
 	if err != nil {
-		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
+		return err
 	}
 
 	response, err := c.SafeRead(int(binary.BigEndian.Uint16(response_length)))
 	if err != nil {
-		log.Errorf("action: receive_response | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
+		return err
 	}
 
 	responseType, numberOfBets := c.ProcessResponseMultipleBet(response)
@@ -369,5 +359,7 @@ func (c *Client) ReceiveMultipleBetResponse() {
 			numberOfBets,
 		)
 	}
+	
+	return nil
 }
 
