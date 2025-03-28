@@ -18,10 +18,12 @@ from common.constants import (
     RESPONSE_HEADER_LENGTH,
     MAX_RETRIES
 )
+import signal
 
 class Server:
-    def __init__(self, port, listen_backlog):
+    def __init__(self, port, listen_backlog, socket_timeout=5.0):
         # Initialize server socket
+        signal.signal(signal.SIGTERM, lambda signal, frame: self.shutdown())
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
@@ -30,7 +32,6 @@ class Server:
         self.agencies_waiting = self._manager.dict() # We change from a set to a dict to be able to use the manager
         self.winners = self._manager.dict()
         self.lottery_performed = self._manager.Value('b', False)
-        
         # Locks
         self.agencies_lock = Lock()
         self.winners_lock = Lock()
@@ -53,14 +54,17 @@ class Server:
                 
                 self._cleanup_processes()
                 
-                p = Process(target=self.__handle_client_connection, args=(client_sock,))
-                p.start()
-                
-                self.processes.append(p)
-                logging.info(f"action: create_process | result: success | pid: {p.pid}")
+                if client_sock:
+                    p = Process(target=self.__handle_client_connection, args=(client_sock,))
+                    p.start()
+                    
+                    self.processes.append(p)
+                    logging.info(f"action: create_process | result: success | pid: {p.pid}")
         except KeyboardInterrupt:
             logging.info("action: keyboard_interrupt | result: shutting_down")
             self.shutdown()
+        except OSError as e:
+            return
             
     def _cleanup_processes(self):
         """Remove completed processes from the process list"""
@@ -68,18 +72,12 @@ class Server:
 
     def shutdown(self):
         """Terminate all processes and close the server socket"""
-        for p in self.processes:
-            if p.is_alive():
-                p.terminate()
-                logging.info(f"action: terminate_process | result: success | pid: {p.pid}")
-        
-        for p in self.processes:
-            p.join(timeout=1.0)
-            
-        if hasattr(self, '_manager'):
-            self._manager.shutdown()
-            
+        self._server_socket.shutdown(socket.SHUT_RDWR)
         self._server_socket.close()
+
+        for p in self.processes:
+            p.terminate()
+
         logging.info("action: close_server_socket | result: success")
 
     def __handle_client_connection(self, client_sock):
