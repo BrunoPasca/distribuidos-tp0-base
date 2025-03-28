@@ -31,6 +31,7 @@ type ClientConfig struct {
 type Client struct {
 	config ClientConfig
 	conn   net.Conn
+	finished	chan bool
 }
 
 // NewClient Initializes a new client receiving the configuration
@@ -38,6 +39,8 @@ type Client struct {
 func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config: config,
+		finished: make(chan bool, 1),
+
 	}
 	return client
 }
@@ -63,9 +66,22 @@ func (c *Client) createClientSocket() error {
 func (c *Client) StartClientLoop() {
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
+	loop:
 	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
+		select {
+		case <-c.finished:
+			log.Infof("action: graceful_shutdown | result: success | client_id: %v",
+				c.config.ID,
+			)
+			break loop
+		default:
+		}
+		
 		// Create the connection the server in every loop iteration. Send an
-		c.createClientSocket()
+		err := c.createClientSocket()
+		if err != nil {
+			return
+		}
 
 		// TODO: Modify the send to avoid short-write
 		fmt.Fprintf(
@@ -90,9 +106,14 @@ func (c *Client) StartClientLoop() {
 			msg,
 		)
 
-		// Wait a time between sending one message and the next one
-		time.Sleep(c.config.LoopPeriod)
-
+		select {
+			case <-c.finished:
+				log.Infof("action: graceful_shutdown | result: success | client_id: %v",
+					c.config.ID,
+				)
+				break loop
+			case <-time.After(c.config.LoopPeriod):
+		}
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }
@@ -119,8 +140,10 @@ func (c *Client) StartClientBetSending() {
 func (c *Client) Shutdown() {
 	if c.conn != nil {
 		c.conn.Close()
+		c.conn = nil
 		log.Info("action: close_client_socket | result: success")
 	}
+	c.finished <- true
 }
 
 func (c *Client) SafeRead(length int) ([]byte, error) {
