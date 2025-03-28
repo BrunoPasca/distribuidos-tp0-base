@@ -100,7 +100,6 @@ func handleSigterm(client *common.Client) {
 		log.Info("action: shutdown | result: in_progress")
 		client.Shutdown()
 		log.Info("action: shutdown | result: success")
-		os.Exit(0)
 	}()
 }
 
