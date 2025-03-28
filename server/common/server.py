@@ -20,9 +20,14 @@ class Server:
 
         # TODO: Modify this program to handle signal to graceful shutdown
         # the server
-        while True:
-            client_sock = self.__accept_new_connection()
-            self.__handle_client_connection(client_sock)
+        try:
+            while True:
+                client_sock = self.__accept_new_connection()
+                self.__handle_client_connection(client_sock)
+        except OSError:
+            return
+        except KeyboardInterrupt:
+            return
 
     def shutdown(self):
         self._server_socket.close()

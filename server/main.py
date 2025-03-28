@@ -41,7 +41,6 @@ def handle_sigterm(server):
         logging.info("action: shutdown | result: in_progress")
         server.shutdown()
         logging.info("action: shutdown | result: success")
-        sys.exit(0)
     return signal_handler
 
 
